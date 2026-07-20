@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GUI Draw Master</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div id="app">
+    <header class="setup">
+      <div class="logo">
+        <span class="logo-mark">◇</span>
+        <div class="logo-text">
+          <strong>GUI Draw Master</strong>
+          <span>TFT / OLED</span>
+        </div>
+      </div>
+
+      <div class="cascade">
+        <label class="field">
+          <span class="field-key">1. Дисплей</span>
+          <select id="sel-display"></select>
+        </label>
+        <span class="cascade-arrow">→</span>
+        <label class="field">
+          <span class="field-key">2. Ориентация</span>
+          <select id="sel-orient"></select>
+        </label>
+        <span class="cascade-arrow">→</span>
+        <label class="field field-wide">
+          <span class="field-key">3. Библиотека</span>
+          <select id="sel-library"></select>
+        </label>
+      </div>
+
+      <div class="setup-meta">
+        <code id="size-badge">240×320</code>
+        <code id="origin-badge">(0,0)</code>
+      </div>
+    </header>
+
+    <div class="body" id="body" style="--rail-w: 96px; --insp-w: 300px;">
+      <aside class="rail" id="rail">
+        <p class="rail-title">Рисование</p>
+        <div id="toolbox" class="tools"></div>
+      </aside>
+      <div class="v-split" id="split-rail" title="Тяните, чтобы изменить ширину"></div>
+
+      <section class="viewport">
+        <div class="viewport-bar">
+          <button type="button" id="btn-new" class="ghost">Новый</button>
+          <button type="button" id="btn-open" class="ghost">Открыть</button>
+          <button type="button" id="btn-save" class="ghost">Сохранить</button>
+          <button type="button" id="btn-code" class="ghost" title="Показать / скрыть код экрана">Код экрана</button>
+          <button type="button" id="btn-copy-all" class="ghost">Копировать код</button>
+          <span class="bar-sep"></span>
+          <button type="button" id="btn-grid" class="ghost active" title="Сетка">Сетка</button>
+          <button type="button" id="btn-zoom-out" class="ghost" title="Уменьшить">−</button>
+          <span id="zoom-label" class="zoom">200%</span>
+          <button type="button" id="btn-zoom-in" class="ghost" title="Увеличить">+</button>
+          <span class="bar-sep"></span>
+          <span class="bg-label">Фон</span>
+          <div id="bg-swatches" class="swatches bar-swatches"></div>
+        </div>
+
+        <div class="stage-area">
+          <div class="stage-wrap" id="stage-wrap">
+            <div class="stage-frame" id="stage-frame">
+              <div class="ruler-corner" title="px"></div>
+              <canvas id="ruler-h" class="ruler ruler-h" height="24"></canvas>
+              <canvas id="ruler-v" class="ruler ruler-v" width="32"></canvas>
+              <div class="stage" id="stage">
+                <canvas id="screen" width="240" height="320"></canvas>
+                <div id="selbox" class="selbox hidden"></div>
+              </div>
+            </div>
+          </div>
+          <input type="range" id="scroll-v" class="scroll-slider scroll-v" min="0" max="0" value="0" title="Вертикальная прокрутка" />
+          <input type="range" id="scroll-h" class="scroll-slider scroll-h" min="0" max="0" value="0" title="Горизонтальная прокрутка" />
+          <div class="scroll-corner"></div>
+        </div>
+        <p class="viewport-hint">Пиксели · ползунки · Ctrl+колесо зум · Alt+ЛКМ панорама · Delete · Ctrl+D · панели тянутся за край</p>
+      </section>
+
+      <div class="v-split" id="split-insp" title="Тяните, чтобы изменить ширину"></div>
+      <aside class="inspector" id="inspector">
+        <div class="insp-block">
+          <h2>Слои</h2>
+          <ul id="layers" class="layers"></ul>
+        </div>
+
+        <div class="insp-block grow">
+          <h2>Свойства</h2>
+          <div id="props" class="props">
+            <p class="muted">Выберите элемент</p>
+          </div>
+        </div>
+
+        <div class="insp-block code-block">
+          <div class="code-head">
+            <h2>Код элемента</h2>
+            <button type="button" id="btn-copy-el" class="ghost tiny">Копировать</button>
+          </div>
+          <pre id="code-el" class="code">// выберите элемент</pre>
+        </div>
+      </aside>
+    </div>
+
+    <footer class="code-dock" id="code-dock" hidden>
+      <div class="code-dock-head">
+        <h2>Код экрана <span id="lib-tag"></span></h2>
+        <div class="code-dock-actions">
+          <button type="button" id="btn-copy-screen" class="ghost tiny">Копировать</button>
+          <button type="button" id="btn-code-close" class="ghost tiny">Скрыть</button>
+        </div>
+      </div>
+      <pre id="code-screen" class="code code-screen"></pre>
+    </footer>
+  </div>
+
+  <input type="file" id="file-open" accept=".json,application/json" hidden />
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
