@@ -465,6 +465,12 @@ function renderProps() {
       els.props.appendChild(propNum("Значение макс.", el.maxVal, (v) => patch("maxVal", v)));
       els.props.appendChild(propCheck("Подписи", el.showLabels, (v) => patch("showLabels", v)));
       els.props.appendChild(propCheck("Показать дугу", el.showArc !== false, (v) => patch("showArc", v)));
+      els.props.appendChild(
+        propNum("Толщина дуги", el.arcThickness ?? 2, (v) => patch("arcThickness", Math.max(1, Math.round(v))), {
+          min: 1,
+          max: 40,
+        })
+      );
       els.props.appendChild(propColor("Цвет дуги", el.arcColor, (v) => patch("arcColor", v)));
       els.props.appendChild(propColor("Цвет делений", el.majorColor, (v) => patch("majorColor", v)));
       els.props.appendChild(propColor("Цвет промежут.", el.minorColor, (v) => patch("minorColor", v)));

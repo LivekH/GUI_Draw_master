@@ -98,15 +98,45 @@ function push(lines, item) {
   else if (item) lines.push(item);
 }
 
-function emitArcApprox(api, cx, cy, r, a0, a1, col, lines, segments = 24) {
+/** Толстая линия: drawWideLine или несколько параллельных drawLine */
+function emitThickLine(api, x1, y1, x2, y2, thickness, col, lines) {
+  const th = Math.max(1, Math.round(thickness || 1));
+  if (th > 1 && api.wideLine) {
+    push(lines, api.wideLine(x1, y1, x2, y2, th, col));
+    return;
+  }
+  if (th <= 1) {
+    push(lines, api.line(x1, y1, x2, y2, col));
+    return;
+  }
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len;
+  const ny = dx / len;
+  const half = (th - 1) / 2;
+  for (let i = 0; i < th; i++) {
+    const o = i - half;
+    const ox = Math.round(nx * o);
+    const oy = Math.round(ny * o);
+    push(lines, api.line(x1 + ox, y1 + oy, x2 + ox, y2 + oy, col));
+  }
+}
+
+/** Дуга кусочками; thickness > 1 — концентрические радиусы (как у drawArc) */
+function emitArcApprox(api, cx, cy, r, a0, a1, col, lines, segments = 24, thickness = 1) {
+  const th = Math.max(1, Math.round(thickness || 1));
   const span = a1 - a0;
   const n = Math.max(4, Math.round((Math.abs(span) / 360) * segments));
-  let prev = polar(cx, cy, r, a0);
-  for (let i = 1; i <= n; i++) {
-    const ang = a0 + (span * i) / n;
-    const p = polar(cx, cy, r, ang);
-    push(lines, api.line(prev.x, prev.y, p.x, p.y, col));
-    prev = p;
+  for (let ring = 0; ring < th; ring++) {
+    const rr = Math.max(1, r - ring);
+    let prev = polar(cx, cy, rr, a0);
+    for (let i = 1; i <= n; i++) {
+      const ang = a0 + (span * i) / n;
+      const p = polar(cx, cy, rr, ang);
+      push(lines, api.line(prev.x, prev.y, p.x, p.y, col));
+      prev = p;
+    }
   }
 }
 
@@ -326,12 +356,10 @@ function emitObject(obj, lib, lines, api) {
   switch (obj.type) {
     case "line": {
       const th = Math.max(1, obj.thickness || 1);
-      if (th > 1 && api.wideLine) {
-        push(lines, api.wideLine(obj.x1, obj.y1, obj.x2, obj.y2, th, obj.stroke));
-      } else {
-        if (th > 1) lines.push(`// толщина ${th} px (библиотека без drawWideLine — обычная линия)`);
-        push(lines, api.line(obj.x1, obj.y1, obj.x2, obj.y2, obj.stroke));
+      if (th > 1 && !api.wideLine) {
+        lines.push(`// толщина ${th} px — эмуляция параллельными линиями`);
       }
+      emitThickLine(api, obj.x1, obj.y1, obj.x2, obj.y2, th, obj.stroke, lines);
       break;
     }
     case "rect":
@@ -340,14 +368,17 @@ function emitObject(obj, lib, lines, api) {
     case "circle":
       push(lines, api.circle(obj.cx, obj.cy, obj.r, obj.fill || obj.stroke, !!obj.filled));
       break;
-    case "arc":
+    case "arc": {
+      const th = Math.max(1, obj.thickness || 1);
       if (api.arc && !api.arcApprox) {
-        const r1 = Math.max(0, obj.r - (obj.thickness || 1));
+        const r1 = Math.max(0, obj.r - th);
         push(lines, api.arc(obj.cx, obj.cy, obj.r, r1, obj.startAngle, obj.endAngle, obj.stroke));
       } else {
-        emitArcApprox(api, obj.cx, obj.cy, obj.r, obj.startAngle, obj.endAngle, obj.stroke, lines);
+        if (th > 1) lines.push(`// толщина дуги ${th} px — концентрические линии`);
+        emitArcApprox(api, obj.cx, obj.cy, obj.r, obj.startAngle, obj.endAngle, obj.stroke, lines, 24, th);
       }
       break;
+    }
     case "text":
       push(
         lines,
@@ -364,11 +395,13 @@ function emitObject(obj, lib, lines, api) {
     }
     case "scale": {
       if (obj.showArc !== false) {
+        const th = Math.max(1, obj.arcThickness || 2);
         if (api.arc && !api.arcApprox) {
-          const r1 = Math.max(0, obj.rOuter - (obj.arcThickness || 2));
+          const r1 = Math.max(0, obj.rOuter - th);
           push(lines, api.arc(obj.cx, obj.cy, obj.rOuter, r1, obj.startAngle, obj.endAngle, obj.arcColor));
         } else {
-          emitArcApprox(api, obj.cx, obj.cy, obj.rOuter, obj.startAngle, obj.endAngle, obj.arcColor, lines, 36);
+          if (th > 1) lines.push(`// толщина дуги шкалы ${th} px — концентрические линии`);
+          emitArcApprox(api, obj.cx, obj.cy, obj.rOuter, obj.startAngle, obj.endAngle, obj.arcColor, lines, 36, th);
         }
       }
       for (const tk of tickPoints(obj)) {
