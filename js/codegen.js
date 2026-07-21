@@ -125,7 +125,7 @@ function emitThickLine(api, x1, y1, x2, y2, thickness, col, lines) {
   }
 }
 
-/** Дуга кусочками; thickness > 1 — концентрические радиусы (как у drawArc) */
+/** Дуга кусочками; thickness > 1 — концентрические радиусы (fallback) */
 function emitArcApprox(api, cx, cy, r, a0, a1, col, lines, segments = 24, thickness = 1) {
   const th = Math.max(1, Math.round(thickness || 1));
   const span = a1 - a0;
@@ -142,60 +142,132 @@ function emitArcApprox(api, cx, cy, r, a0, a1, col, lines, segments = 24, thickn
   }
 }
 
+/**
+ * Углы редактора: 0° = вверх, по часовой.
+ * Разные библиотеки считают 0° по-своему — конвертируем здесь.
+ */
+function toLibAngles(api, a0, a1) {
+  const mode = api.arcAngle || "raw";
+  const map = (a) => {
+    if (mode === "tft_espi") return normArc(a + 180); // 0° у TFT_eSPI = 6 часов
+    if (mode === "lovyan" || mode === "arduino_gfx") return normArc(90 - a); // 0° = 3 часа, против часовой
+    if (mode === "u8g2") return Math.round((((normArc(a + 90) % 360) * 256) / 360) % 256); // 0…255
+    return a;
+  };
+  return { a0: map(a0), a1: map(a1) };
+}
+
+/** Нативная дуга библиотеки или fallback линиями */
+function emitArc(api, cx, cy, r, a0, a1, col, lines, thickness = 1, segments = 24) {
+  const th = Math.max(1, Math.round(thickness || 1));
+  const rOuter = Math.max(1, Math.round(r));
+  const rInner = Math.max(0, rOuter - th);
+
+  if (api.arc && !api.arcApprox) {
+    const { a0: s, a1: e } = toLibAngles(api, a0, a1);
+    if (api.arcRing) {
+      // один вызов с внешним/внутренним радиусом (TFT_eSPI, Lovyan, Arduino_GFX)
+      push(lines, api.arc(cx, cy, rOuter, rInner, s, e, col));
+    } else if (api.arcSingle) {
+      // только радиус (U8g2) — для толщины несколько дуг
+      for (let ring = 0; ring < th; ring++) {
+        push(lines, api.arc(cx, cy, Math.max(1, rOuter - ring), 0, s, e, col));
+      }
+    } else {
+      push(lines, api.arc(cx, cy, rOuter, rInner, s, e, col));
+    }
+    return;
+  }
+
+  if (th > 1) {
+    lines.push(`// дуга: у «${api.libLabel || "этой библиотеки"}» нет drawArc — эмуляция линиями`);
+  }
+  emitArcApprox(api, cx, cy, rOuter, a0, a1, col, lines, segments, th);
+}
+
+/** Залитый сектор (pie) */
+function emitSector(api, cx, cy, r, a0, a1, col, lines) {
+  if (api.fillArc && !api.arcApprox) {
+    const { a0: s, a1: e } = toLibAngles(api, a0, a1);
+    push(lines, api.fillArc(cx, cy, Math.max(1, r), 0, s, e, col));
+    return;
+  }
+  const a = polar(cx, cy, r, a0);
+  const b = polar(cx, cy, r, a1);
+  push(lines, api.line(cx, cy, a.x, a.y, col));
+  push(lines, api.line(cx, cy, b.x, b.y, col));
+  emitArcApprox(api, cx, cy, r, a0, a1, col, lines, 32, 1);
+}
+
+function gfxBase(t, c, libLabel) {
+  return {
+    libLabel,
+    setRotation: (r) => `${t}.setRotation(${r});`,
+    fillScreen: (bg) => `${t}.fillScreen(${c(bg)});`,
+    line: (x1, y1, x2, y2, col) => `${t}.drawLine(${x1}, ${y1}, ${x2}, ${y2}, ${c(col)});`,
+    rect: (x, y, w, h, col, fill) =>
+      fill
+        ? `${t}.fillRect(${x}, ${y}, ${w}, ${h}, ${c(col)});`
+        : `${t}.drawRect(${x}, ${y}, ${w}, ${h}, ${c(col)});`,
+    circle: (cx, cy, r, col, fill) =>
+      fill
+        ? `${t}.fillCircle(${cx}, ${cy}, ${r}, ${c(col)});`
+        : `${t}.drawCircle(${cx}, ${cy}, ${r}, ${c(col)});`,
+    text: (x, y, text, col, size) => [
+      `${t}.setTextColor(${c(col)});`,
+      `${t}.setTextSize(${size});`,
+      `${t}.setCursor(${x}, ${y});`,
+      `${t}.print("${esc(text)}");`,
+    ],
+  };
+}
+
 function apiFor(lib) {
   const t = lib.obj;
   const c = (h) => colorExpr(lib, h);
   const family = lib.family;
+  const label = lib.label || family;
 
   if (family === "tft_espi") {
     return {
-      setRotation: (r) => `${t}.setRotation(${r});`,
-      fillScreen: (bg) => `${t}.fillScreen(${c(bg)});`,
-      line: (x1, y1, x2, y2, col) => `${t}.drawLine(${x1}, ${y1}, ${x2}, ${y2}, ${c(col)});`,
+      ...gfxBase(t, c, label),
       wideLine: (x1, y1, x2, y2, w, col) =>
         `${t}.drawWideLine(${x1}, ${y1}, ${x2}, ${y2}, ${w}, ${c(col)});`,
-      rect: (x, y, w, h, col, fill) =>
-        fill
-          ? `${t}.fillRect(${x}, ${y}, ${w}, ${h}, ${c(col)});`
-          : `${t}.drawRect(${x}, ${y}, ${w}, ${h}, ${c(col)});`,
-      circle: (cx, cy, r, col, fill) =>
-        fill
-          ? `${t}.fillCircle(${cx}, ${cy}, ${r}, ${c(col)});`
-          : `${t}.drawCircle(${cx}, ${cy}, ${r}, ${c(col)});`,
-      text: (x, y, text, col, size) => [
-        `${t}.setTextColor(${c(col)});`,
-        `${t}.setTextSize(${size});`,
-        `${t}.setCursor(${x}, ${y});`,
-        `${t}.print("${esc(text)}");`,
-      ],
+      // drawArc(x,y, r_outer, r_inner, start, end, fg, bg, smooth)
       arc: (cx, cy, r0, r1, a0, a1, col) =>
-        `${t}.drawArc(${cx}, ${cy}, ${r0}, ${r1}, ${normArc(a0)}, ${normArc(a1)}, ${c(col)}, ${c(col)}, false);`,
+        `${t}.drawArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)}, ${c(col)}, false);`,
+      fillArc: (cx, cy, r0, r1, a0, a1, col) =>
+        `${t}.drawArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)}, ${c(col)}, false);`,
+      arcRing: true,
+      arcAngle: "tft_espi",
       arcApprox: false,
     };
   }
 
   if (family === "lovyangfx") {
     return {
-      setRotation: (r) => `${t}.setRotation(${r});`,
-      fillScreen: (bg) => `${t}.fillScreen(${c(bg)});`,
-      line: (x1, y1, x2, y2, col) => `${t}.drawLine(${x1}, ${y1}, ${x2}, ${y2}, ${c(col)});`,
+      ...gfxBase(t, c, label),
       wideLine: (x1, y1, x2, y2, w, col) =>
         `${t}.drawWideLine(${x1}, ${y1}, ${x2}, ${y2}, ${w}, ${c(col)});`,
-      rect: (x, y, w, h, col, fill) =>
-        fill
-          ? `${t}.fillRect(${x}, ${y}, ${w}, ${h}, ${c(col)});`
-          : `${t}.drawRect(${x}, ${y}, ${w}, ${h}, ${c(col)});`,
-      circle: (cx, cy, r, col, fill) =>
-        fill
-          ? `${t}.fillCircle(${cx}, ${cy}, ${r}, ${c(col)});`
-          : `${t}.drawCircle(${cx}, ${cy}, ${r}, ${c(col)});`,
-      text: (x, y, text, col, size) => [
-        `${t}.setTextColor(${c(col)});`,
-        `${t}.setTextSize(${size});`,
-        `${t}.setCursor(${x}, ${y});`,
-        `${t}.print("${esc(text)}");`,
-      ],
-      arc: (cx, cy, r0, r1, a0, a1, col) => `${t}.drawArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)});`,
+      arc: (cx, cy, r0, r1, a0, a1, col) =>
+        `${t}.drawArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)});`,
+      fillArc: (cx, cy, r0, r1, a0, a1, col) =>
+        `${t}.fillArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)});`,
+      arcRing: true,
+      arcAngle: "lovyan",
+      arcApprox: false,
+    };
+  }
+
+  if (family === "arduino_gfx") {
+    return {
+      ...gfxBase(t, c, label),
+      arc: (cx, cy, r0, r1, a0, a1, col) =>
+        `${t}.drawArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)});`,
+      fillArc: (cx, cy, r0, r1, a0, a1, col) =>
+        `${t}.fillArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)});`,
+      arcRing: true,
+      arcAngle: "arduino_gfx",
       arcApprox: false,
     };
   }
@@ -203,6 +275,7 @@ function apiFor(lib) {
   if (family === "u8g2") {
     const u8r = ["U8G2_R0", "U8G2_R1", "U8G2_R2", "U8G2_R3"];
     return {
+      libLabel: label,
       setRotation: (r) => `${t}.setDisplayRotation(${u8r[r] || "U8G2_R0"});`,
       fillScreen: () => `${t}.clearBuffer();`,
       line: (x1, y1, x2, y2) => `${t}.drawLine(${x1}, ${y1}, ${x2}, ${y2});`,
@@ -211,25 +284,31 @@ function apiFor(lib) {
       circle: (cx, cy, r, _c, fill) =>
         fill ? `${t}.drawDisc(${cx}, ${cy}, ${r});` : `${t}.drawCircle(${cx}, ${cy}, ${r});`,
       text: (x, y, text) => [`${t}.setFont(u8g2_font_6x12_tr);`, `${t}.drawStr(${x}, ${y + 10}, "${esc(text)}");`],
-      arcApprox: true,
+      // U8g2: углы 0…255 на полный круг; толщина — несколько радиусов
+      arc: (cx, cy, r0, _r1, a0, a1) => `${t}.drawArc(${cx}, ${cy}, ${r0}, ${a0}, ${a1});`,
+      arcSingle: true,
+      arcAngle: "u8g2",
+      arcApprox: false,
       footer: () => `${t}.sendBuffer();`,
     };
   }
 
   if (family === "u8x8") {
     return {
+      libLabel: label,
       setRotation: (r) => `// U8x8: поворот задайте в конструкторе (rotation=${r})`,
       fillScreen: () => `${t}.clearDisplay();`,
       line: () => `// u8x8: нет линий — используйте U8g2`,
       rect: () => `// u8x8: нет прямоугольников — U8g2`,
       circle: () => `// u8x8: нет окружностей — U8g2`,
       text: (x, y, text) => `${t}.drawString(${Math.floor(x / 8)}, ${Math.floor(y / 8)}, "${esc(text)}");`,
-      arcApprox: false,
+      arcApprox: true,
     };
   }
 
   if (family === "ssd1306_wire") {
     return {
+      libLabel: label,
       setRotation: (r) =>
         r === 0
           ? `// SSD1306Wire: rotation 0`
@@ -248,6 +327,7 @@ function apiFor(lib) {
 
   if (family === "tiny4koled") {
     return {
+      libLabel: label,
       setRotation: (r) => `// Tiny4kOLED: rotation ${r}`,
       fillScreen: () => `${t}.clear();`,
       line: (x1, y1, x2, y2) => `${t}.drawLine(${x1}, ${y1}, ${x2}, ${y2});`,
@@ -262,6 +342,7 @@ function apiFor(lib) {
 
   if (family === "utft") {
     return {
+      libLabel: label,
       setRotation: (r) => `// UTFT: ориентацию задайте в InitLCD (rotation=${r})`,
       fillScreen: (bg) => {
         const { r, g, b } = hexToRgb(bg);
@@ -295,6 +376,7 @@ function apiFor(lib) {
       return `${r}, ${g}, ${b}`;
     };
     return {
+      libLabel: label,
       setRotation: (r) => `// Ucglib: поворот ${r} — зависит от драйвера/конструктора`,
       fillScreen: (bg) => [`${t}.setColor(${rgb(bg)});`, `${t}.clearScreen();`],
       line: (x1, y1, x2, y2, col) => [`${t}.setColor(${rgb(col)});`, `${t}.drawLine(${x1}, ${y1}, ${x2}, ${y2});`],
@@ -313,12 +395,20 @@ function apiFor(lib) {
         `${t}.setPrintPos(${x}, ${y});`,
         `${t}.print("${esc(text)}");`,
       ],
-      arcApprox: true,
+      // Ucglib: углы в градусах, 0 = 3 часа
+      arc: (cx, cy, r0, _r1, a0, a1, col) => [
+        `${t}.setColor(${rgb(col)});`,
+        `${t}.drawArc(${cx}, ${cy}, ${r0}, ${a0}, ${a1}, 0);`,
+      ],
+      arcSingle: true,
+      arcAngle: "arduino_gfx",
+      arcApprox: false,
     };
   }
 
   if (family === "lvgl") {
     return {
+      libLabel: label,
       setRotation: (r) => `// LVGL: lv_display_set_rotation(disp, ${r * 90});`,
       fillScreen: (bg) => `// screen bg ${format565(bg)}`,
       line: (x1, y1, x2, y2, col) => `// lv_draw_line (${x1},${y1})-(${x2},${y2}) ${format565(col)}`,
@@ -327,29 +417,17 @@ function apiFor(lib) {
       circle: (cx, cy, r, col, fill) =>
         `// lv ${fill ? "fill" : "draw"} circle (${cx},${cy}) r=${r} ${format565(col)}`,
       text: (x, y, text, col) => `// lv_label "${esc(text)}" at (${x},${y}) ${format565(col)}`,
-      arcApprox: true,
+      arc: (cx, cy, r0, r1, a0, a1, col) =>
+        `// lv_arc / lv_draw_arc center=(${cx},${cy}) r=${r0}..${r1} ${a0}°…${a1}° ${format565(col)}`,
+      arcRing: true,
+      arcAngle: "raw",
+      arcApprox: false,
     };
   }
 
-  // Adafruit GFX / Arduino_GFX / MCUFRIEND / Adafruit OLED
+  // Adafruit GFX / MCUFRIEND — в базовом API нет drawArc
   return {
-    setRotation: (r) => `${t}.setRotation(${r});`,
-    fillScreen: (bg) => `${t}.fillScreen(${c(bg)});`,
-    line: (x1, y1, x2, y2, col) => `${t}.drawLine(${x1}, ${y1}, ${x2}, ${y2}, ${c(col)});`,
-    rect: (x, y, w, h, col, fill) =>
-      fill
-        ? `${t}.fillRect(${x}, ${y}, ${w}, ${h}, ${c(col)});`
-        : `${t}.drawRect(${x}, ${y}, ${w}, ${h}, ${c(col)});`,
-    circle: (cx, cy, r, col, fill) =>
-      fill
-        ? `${t}.fillCircle(${cx}, ${cy}, ${r}, ${c(col)});`
-        : `${t}.drawCircle(${cx}, ${cy}, ${r}, ${c(col)});`,
-    text: (x, y, text, col, size) => [
-      `${t}.setTextColor(${c(col)});`,
-      `${t}.setTextSize(${size});`,
-      `${t}.setCursor(${x}, ${y});`,
-      `${t}.print("${esc(text)}");`,
-    ],
+    ...gfxBase(t, c, label),
     arcApprox: true,
   };
 }
@@ -372,13 +450,7 @@ function emitObject(obj, lib, lines, api) {
       break;
     case "arc": {
       const th = Math.max(1, obj.thickness || 1);
-      if (api.arc && !api.arcApprox) {
-        const r1 = Math.max(0, obj.r - th);
-        push(lines, api.arc(obj.cx, obj.cy, obj.r, r1, obj.startAngle, obj.endAngle, obj.stroke));
-      } else {
-        if (th > 1) lines.push(`// толщина дуги ${th} px — концентрические линии`);
-        emitArcApprox(api, obj.cx, obj.cy, obj.r, obj.startAngle, obj.endAngle, obj.stroke, lines, 24, th);
-      }
+      emitArc(api, obj.cx, obj.cy, obj.r, obj.startAngle, obj.endAngle, obj.stroke, lines, th, 24);
       break;
     }
     case "text":
@@ -393,24 +465,13 @@ function emitObject(obj, lib, lines, api) {
         )
       );
       break;
-    case "sector": {
-      const a = polar(obj.cx, obj.cy, obj.r, obj.startAngle);
-      const b = polar(obj.cx, obj.cy, obj.r, obj.endAngle);
-      push(lines, api.line(obj.cx, obj.cy, a.x, a.y, obj.fill));
-      push(lines, api.line(obj.cx, obj.cy, b.x, b.y, obj.fill));
-      emitArcApprox(api, obj.cx, obj.cy, obj.r, obj.startAngle, obj.endAngle, obj.fill, lines, 32);
+    case "sector":
+      emitSector(api, obj.cx, obj.cy, obj.r, obj.startAngle, obj.endAngle, obj.fill, lines);
       break;
-    }
     case "scale": {
       if (obj.showArc !== false) {
         const th = Math.max(1, obj.arcThickness || 2);
-        if (api.arc && !api.arcApprox) {
-          const r1 = Math.max(0, obj.rOuter - th);
-          push(lines, api.arc(obj.cx, obj.cy, obj.rOuter, r1, obj.startAngle, obj.endAngle, obj.arcColor));
-        } else {
-          if (th > 1) lines.push(`// толщина дуги шкалы ${th} px — концентрические линии`);
-          emitArcApprox(api, obj.cx, obj.cy, obj.rOuter, obj.startAngle, obj.endAngle, obj.arcColor, lines, 36, th);
-        }
+        emitArc(api, obj.cx, obj.cy, obj.rOuter, obj.startAngle, obj.endAngle, obj.arcColor, lines, th, 36);
       }
       for (const tk of tickPoints(obj)) {
         if (tk.isMajor && obj.showMajorTicks === false) continue;
