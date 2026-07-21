@@ -463,6 +463,9 @@ function renderProps() {
       els.props.appendChild(propNum("Промежут.", el.minorPerMajor, (v) => patch("minorPerMajor", v), { min: 0 }));
       els.props.appendChild(propNum("Значение мин.", el.minVal, (v) => patch("minVal", v)));
       els.props.appendChild(propNum("Значение макс.", el.maxVal, (v) => patch("maxVal", v)));
+      els.props.appendChild(
+        propCheck("Инвертировать шкалу", !!el.invertValues, (v) => patch("invertValues", v))
+      );
       els.props.appendChild(propCheck("Подписи", el.showLabels, (v) => patch("showLabels", v)));
       els.props.appendChild(propCheck("Показать дугу", el.showArc !== false, (v) => patch("showArc", v)));
       els.props.appendChild(

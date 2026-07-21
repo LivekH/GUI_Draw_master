@@ -28,14 +28,16 @@ export function tickPoints(scale) {
 }
 
 export function scaleLabels(scale) {
-  const { cx, cy, labelRadius, startAngle, endAngle, majorCount, minVal, maxVal } = scale;
+  const { cx, cy, labelRadius, startAngle, endAngle, majorCount, minVal, maxVal, invertValues } =
+    scale;
   const majors = Math.max(2, majorCount | 0);
   const out = [];
   for (let i = 0; i < majors; i++) {
     const t = i / (majors - 1);
     const ang = startAngle + (endAngle - startAngle) * t;
     const p = polar(cx, cy, labelRadius, ang);
-    const val = minVal + (maxVal - minVal) * t;
+    const vt = invertValues ? 1 - t : t;
+    const val = minVal + (maxVal - minVal) * vt;
     const text =
       Number.isInteger(minVal) && Number.isInteger(maxVal) && Number.isInteger(val)
         ? String(Math.round(val))

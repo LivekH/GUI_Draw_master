@@ -39,6 +39,7 @@ function defaults(type, W, H) {
         minorPerMajor: 4,
         minVal: 0,
         maxVal: 100,
+        invertValues: false,
         showLabels: true,
         showArc: true,
         arcThickness: 2,
