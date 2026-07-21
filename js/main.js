@@ -306,7 +306,6 @@ function renderToolbox() {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "tool";
-    btn.title = t.hint;
     btn.innerHTML = `<span class="g">${t.glyph}</span>${t.label}`;
     btn.addEventListener("click", () => {
       const el = createElement(t.type, state.project.width, state.project.height);
@@ -314,6 +313,7 @@ function renderToolbox() {
       state.selectedId = el.id;
       redraw();
     });
+    attachHelp(btn, t.label, t.hint);
     els.toolbox.appendChild(btn);
   }
 }
@@ -332,9 +332,117 @@ function renderLayers() {
   }
 }
 
+const HELP_DELAY_MS = 10000;
+
+const PROP_HELP = {
+  Имя: "Имя элемента. Попадает в комментарий перед блоком кода — удобно искать в скетче.",
+  "Центр X":
+    "Горизонталь центра в пикселях (0 — левый край). Кнопка «центр» ставит середину ширины текущего экрана — полезно после смены ориентации.",
+  "Центр Y":
+    "Вертикаль центра в пикселях (0 — верх). Кнопка «центр» ставит середину высоты экрана.",
+  "Радиус внеш.": "Внешний радиус дуги шкалы и концов делений.",
+  "Радиус внут.": "Внутренний край major-делений. Чем меньше разница с внешним — тем короче штрихи.",
+  "Радиус подп.": "Радиус размещения числовых подписей (обычно чуть меньше внутренней зоны).",
+  "Начало °":
+    "Угол начала дуги. 0° — вверх, 90° — вправо, −90° / 270° — влево. Для шкалы слева→направо часто −120…120.",
+  "Конец °": "Угол конца дуги. Вместе с «Начало °» задаёт сектор прибора.",
+  Делений: "Число крупных (major) рисок, включая крайние. Подписей столько же.",
+  "Промежут.": "Сколько мелких делений между соседними крупными.",
+  "Значение мин.": "Число на первом конце дуги (если не включена инверсия).",
+  "Значение макс.": "Число на втором конце дуги (если не включена инверсия).",
+  "Инвертировать шкалу":
+    "Меняет местами мин и макс по дуге: 0 оказывается у «Конец °», максимум у «Начало °». Удобно для классических приборов слева→направо.",
+  Подписи: "Показывать числовые значения у major-делений.",
+  "Показать дугу": "Рисовать основную дугу шкалы (без неё остаются только деления).",
+  "Толщина дуги": "Толщина дуги шкалы в пикселях. В коде: drawArc или несколько концентрических линий.",
+  "Цвет дуги": "Цвет дуги шкалы (в коде — RGB565 или mono).",
+  "Цвет делений": "Цвет крупных рисок.",
+  "Цвет промежут.": "Цвет мелких рисок.",
+  "Цвет текста": "Цвет числовых подписей шкалы.",
+  Радиус: "Радиус окружности / сектора / дуги в пикселях.",
+  Толщина: "Толщина линии или дуги. >1: drawWideLine или эмуляция несколькими линиями.",
+  Цвет: "Цвет элемента в палитре редактора → в коде RGB565 / mono.",
+  "Цвет обводки": "Цвет контура (если без заливки или для обводки).",
+  "Цвет заливки": "Цвет заливки при включённой галочке «Заливка».",
+  Заливка: "Закрасить фигуру целиком, а не только контур.",
+  "X начало": "X первой точки линии.",
+  "Y начало": "Y первой точки линии.",
+  "X конец": "X второй точки линии.",
+  "Y конец": "Y второй точки линии.",
+  X: "Левый край (для рамки) или позиция текста по X.",
+  Y: "Верхний край (для рамки) или позиция текста по Y.",
+  Ширина: "Ширина прямоугольника в пикселях.",
+  Высота: "Высота прямоугольника в пикселях.",
+  Текст: "Строка, которая уйдёт в print / drawStr.",
+  "Размер шрифта": "Размер в редакторе. На плате обычно setTextSize ≈ fontSize/8 — правьте под библиотеку.",
+};
+
+/** Подсказка после удержания курсора ~10 с */
+const helpTip = (() => {
+  const tip = document.createElement("div");
+  tip.className = "help-tip";
+  tip.setAttribute("role", "tooltip");
+  document.body.appendChild(tip);
+  let timer = null;
+  let activeEl = null;
+
+  const hide = () => {
+    tip.classList.remove("visible");
+    tip.innerHTML = "";
+  };
+
+  const show = (el, title, text, ev) => {
+    tip.innerHTML = `<strong>${title}</strong>${text}`;
+    tip.classList.add("visible");
+    const pad = 12;
+    let x = (ev?.clientX ?? 0) + 14;
+    let y = (ev?.clientY ?? 0) + 16;
+    tip.style.left = "0px";
+    tip.style.top = "0px";
+    const tw = tip.offsetWidth;
+    const th = tip.offsetHeight;
+    if (x + tw > window.innerWidth - pad) x = window.innerWidth - tw - pad;
+    if (y + th > window.innerHeight - pad) y = window.innerHeight - th - pad;
+    if (x < pad) x = pad;
+    if (y < pad) y = pad;
+    tip.style.left = `${x}px`;
+    tip.style.top = `${y}px`;
+  };
+
+  return {
+    attach(el, title, text) {
+      if (!el || !text) return;
+      let lastEv = null;
+      el.addEventListener("mouseenter", (e) => {
+        activeEl = el;
+        lastEv = e;
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          if (activeEl === el) show(el, title, text, lastEv);
+        }, HELP_DELAY_MS);
+      });
+      el.addEventListener("mousemove", (e) => {
+        lastEv = e;
+        if (tip.classList.contains("visible") && activeEl === el) {
+          show(el, title, text, e);
+        }
+      });
+      el.addEventListener("mouseleave", () => {
+        if (activeEl === el) activeEl = null;
+        clearTimeout(timer);
+        hide();
+      });
+    },
+  };
+})();
+
+function attachHelp(el, title, text) {
+  helpTip.attach(el, title, text);
+}
+
 function propNum(label, val, onChange, opts = {}) {
   const row = document.createElement("div");
-  row.className = "prop-row";
+  row.className = "prop-row" + (opts.action ? " has-action" : "");
   row.innerHTML = `<label>${label}</label>`;
   const input = document.createElement("input");
   input.type = "number";
@@ -344,6 +452,20 @@ function propNum(label, val, onChange, opts = {}) {
   if (opts.max != null) input.max = opts.max;
   input.addEventListener("change", () => onChange(Number(input.value)));
   row.appendChild(input);
+  if (opts.action) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "prop-action-btn";
+    btn.textContent = opts.action.label;
+    btn.title = opts.action.title || opts.action.label;
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      opts.action.onClick();
+    });
+    row.appendChild(btn);
+  }
+  const help = opts.help || PROP_HELP[label];
+  if (help) attachHelp(row, label, help);
   return row;
 }
 
@@ -356,6 +478,8 @@ function propText(label, val, onChange) {
   input.value = val ?? "";
   input.addEventListener("change", () => onChange(input.value));
   row.appendChild(input);
+  const help = PROP_HELP[label];
+  if (help) attachHelp(row, label, help);
   return row;
 }
 
@@ -414,6 +538,8 @@ function propColor(label, val, onChange) {
   wrap.appendChild(code);
 
   row.append(lab, wrap);
+  const help = PROP_HELP[label];
+  if (help) attachHelp(row, label, help);
   return row;
 }
 
@@ -426,6 +552,8 @@ function propCheck(label, val, onChange) {
   input.checked = !!val;
   input.addEventListener("change", () => onChange(input.checked));
   row.appendChild(input);
+  const help = PROP_HELP[label];
+  if (help) attachHelp(row, label, help);
   return row;
 }
 
@@ -446,8 +574,32 @@ function renderProps() {
 
   const commonXY = () => {
     if ("cx" in el) {
-      els.props.appendChild(propNum("Центр X", el.cx, (v) => patch("cx", Math.round(v))));
-      els.props.appendChild(propNum("Центр Y", el.cy, (v) => patch("cy", Math.round(v))));
+      els.props.appendChild(
+        propNum("Центр X", el.cx, (v) => patch("cx", Math.round(v)), {
+          action: {
+            label: "центр",
+            title: "Середина ширины экрана",
+            onClick: () => {
+              el.cx = Math.round(state.project.width / 2);
+              redraw();
+              renderProps();
+            },
+          },
+        })
+      );
+      els.props.appendChild(
+        propNum("Центр Y", el.cy, (v) => patch("cy", Math.round(v)), {
+          action: {
+            label: "центр",
+            title: "Середина высоты экрана",
+            onClick: () => {
+              el.cy = Math.round(state.project.height / 2);
+              redraw();
+              renderProps();
+            },
+          },
+        })
+      );
     }
   };
 
@@ -889,4 +1041,27 @@ els.display.value = state.project.displayId;
 els.orient.value = state.project.orientationId;
 fillLibraries();
 renderToolbox();
+
+attachHelp(
+  els.display.closest(".field") || els.display,
+  "Дисплей",
+  "Разрешение и тип экрана (OLED/TFT). Меняет размер холста. Сначала выберите дисплей, потом ориентацию и библиотеку."
+);
+attachHelp(
+  els.orient.closest(".field") || els.orient,
+  "Ориентация",
+  "Поворот экрана (setRotation 0…3). Меняет ширину↔высоту холста. Рисунок сам не сдвигается — выберите элемент и нажмите «центр» у Центр X / Центр Y."
+);
+attachHelp(
+  els.library.closest(".field") || els.library,
+  "Библиотека",
+  "Под какую draw-библиотеку генерировать код (TFT_eSPI, Adafruit GFX, U8g2…). Список зависит от типа дисплея."
+);
+attachHelp($("btn-new"), "Новый", "Очистить проект и начать с пустого экрана.");
+attachHelp($("btn-open"), "Открыть", "Загрузить ранее сохранённый JSON проекта.");
+attachHelp($("btn-save"), "Сохранить", "Скачать проект в JSON (удобно не потерять работу после обновления страницы).");
+attachHelp($("btn-code"), "Код экрана", "Показать / скрыть панель с полным drawGui() для выбранной библиотеки.");
+attachHelp($("btn-copy-all"), "Копировать код", "Скопировать код всего экрана в буфер обмена.");
+attachHelp($("btn-grid"), "Сетка", "Включить / выключить пиксельную сетку на холсте.");
+
 redraw();

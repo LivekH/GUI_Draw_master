@@ -627,6 +627,28 @@ html, body {
   align-items: center;
 }
 
+.prop-row.has-action {
+  grid-template-columns: 88px 1fr auto;
+}
+
+.prop-action-btn {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--accent-2);
+  border-radius: 3px;
+  padding: 0.2rem 0.4rem;
+  font-size: 0.62rem;
+  font-family: var(--font);
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.prop-action-btn:hover {
+  border-color: var(--accent-2);
+  background: color-mix(in srgb, var(--accent-2) 12%, transparent);
+}
+
 .prop-row label {
   font-size: 0.7rem;
   color: var(--muted);
@@ -653,6 +675,38 @@ html, body {
 .prop-row input[type="checkbox"] {
   width: auto;
   justify-self: start;
+}
+
+/* Delayed help tip */
+.help-tip {
+  position: fixed;
+  z-index: 9999;
+  max-width: 280px;
+  padding: 0.55rem 0.7rem;
+  background: #1a1e24;
+  border: 1px solid var(--accent-2);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 0.72rem;
+  line-height: 1.4;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.help-tip.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.help-tip strong {
+  display: block;
+  color: var(--accent-2);
+  font-size: 0.68rem;
+  margin-bottom: 0.25rem;
+  font-weight: 600;
 }
 
 .prop-actions {
