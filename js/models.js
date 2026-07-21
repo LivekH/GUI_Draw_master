@@ -5,7 +5,7 @@ export const TOOLS = [
     type: "scale",
     label: "Шкала",
     glyph: "◔",
-    hint: "Аналоговая шкала: дуга, деления и числовые подписи. Углы «Начало/Конец» задают сектор; галочка «Инвертировать шкалу» меняет мин↔макс по дуге.",
+    hint: "Аналоговая шкала: дуга, основные/доп. деления и цифры — по отдельным галочкам. Режим шрифта = setTextSize; инверсия меняет мин↔макс по дуге.",
   },
   {
     type: "arc",
@@ -23,7 +23,7 @@ export const TOOLS = [
     type: "sector",
     label: "Сектор",
     glyph: "◐",
-    hint: "Цветовой сектор шкалы (зона от угла до угла). Удобно для «красной зоны» спидометра.",
+    hint: "Залитый «кусок пирога» от центра: цветовая зона на шкале (например красная зона 80–100). Не деления и не стрелка — только подкраска сектора.",
   },
   {
     type: "line",
@@ -75,7 +75,11 @@ function defaults(type, W, H) {
         minVal: 0,
         maxVal: 100,
         invertValues: false,
+        showMajorTicks: true,
+        showMinorTicks: true,
         showLabels: true,
+        labelTextSize: 1,
+        labelFontSize: 10,
         showArc: true,
         arcThickness: 2,
         arcColor: "#c8d0dc",
@@ -148,6 +152,7 @@ function defaults(type, W, H) {
         y: Math.round(H * 0.45),
         text: "GUI",
         fontSize: 16,
+        textSize: 2,
         fill: "#e8eef6",
       };
     default:

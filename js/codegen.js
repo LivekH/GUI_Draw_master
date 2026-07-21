@@ -384,7 +384,13 @@ function emitObject(obj, lib, lines, api) {
     case "text":
       push(
         lines,
-        api.text(obj.x, obj.y, obj.text, obj.fill, Math.max(1, Math.round((obj.fontSize || 12) / 8)))
+        api.text(
+          obj.x,
+          obj.y,
+          obj.text,
+          obj.fill,
+          Math.max(1, Math.min(3, obj.textSize || Math.round((obj.fontSize || 12) / 8) || 1))
+        )
       );
       break;
     case "sector": {
@@ -407,11 +413,19 @@ function emitObject(obj, lib, lines, api) {
         }
       }
       for (const tk of tickPoints(obj)) {
+        if (tk.isMajor && obj.showMajorTicks === false) continue;
+        if (!tk.isMajor && obj.showMinorTicks === false) continue;
         push(lines, api.line(tk.x1, tk.y1, tk.x2, tk.y2, tk.isMajor ? obj.majorColor : obj.minorColor));
       }
       if (obj.showLabels) {
+        const ts = Math.max(1, Math.min(3, obj.labelTextSize || Math.round((obj.labelFontSize || 10) / 8) || 1));
+        const ox = 3 * ts;
+        const oy = 4 * ts;
         for (const lb of scaleLabels(obj)) {
-          push(lines, api.text(lb.x - String(lb.text).length * 3, lb.y - 4, lb.text, obj.labelColor, 1));
+          push(
+            lines,
+            api.text(lb.x - String(lb.text).length * ox, lb.y - oy, lb.text, obj.labelColor, ts)
+          );
         }
       }
       break;

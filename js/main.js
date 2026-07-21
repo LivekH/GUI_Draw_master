@@ -44,6 +44,7 @@ const els = {
   scrollH: $("scroll-h"),
   scrollV: $("scroll-v"),
   bgSwatches: $("bg-swatches"),
+  cursorPos: $("cursor-pos"),
 };
 
 const ctx = els.canvas.getContext("2d");
@@ -352,8 +353,12 @@ const PROP_HELP = {
   "Значение макс.": "Число на втором конце дуги (если не включена инверсия).",
   "Инвертировать шкалу":
     "Меняет местами мин и макс по дуге: 0 оказывается у «Конец °», максимум у «Начало °». Удобно для классических приборов слева→направо.",
-  Подписи: "Показывать числовые значения у major-делений.",
-  "Показать дугу": "Рисовать основную дугу шкалы (без неё остаются только деления).",
+  "Основные деления": "Крупные риски шкалы (major). Можно выключить, оставив только цифры или мелкие штрихи.",
+  "Доп. деления": "Мелкие риски между основными. Число задаётся полем «Промежут.»",
+  "Цифровые значения": "Числа у основных делений (мин…макс). Не зависят от рисок — можно показать только цифры.",
+  "Режим шрифта": "setTextSize(1/2/3) в коде библиотеки (GFX/TFT_eSPI). Влияет на размер цифр на реальном дисплее.",
+  "Высота шрифта": "Высота цифр шкалы в пикселях на холсте редактора (превью). В код уходит «Режим шрифта» (setTextSize).",
+  "Показать дугу": "Рисовать основную дугу шкалы (без неё остаются только деления/цифры).",
   "Толщина дуги": "Толщина дуги шкалы в пикселях. В коде: drawArc или несколько концентрических линий.",
   "Цвет дуги": "Цвет дуги шкалы (в коде — RGB565 или mono).",
   "Цвет делений": "Цвет крупных рисок.",
@@ -362,9 +367,9 @@ const PROP_HELP = {
   Радиус: "Радиус окружности / сектора / дуги в пикселях.",
   Толщина: "Толщина линии или дуги. >1: drawWideLine или эмуляция несколькими линиями.",
   Цвет: "Цвет элемента в палитре редактора → в коде RGB565 / mono.",
-  "Цвет обводки": "Цвет контура (если без заливки или для обводки).",
+  "Цвет обводки": "Цвет контура, если заливка выключена.",
   "Цвет заливки": "Цвет заливки при включённой галочке «Заливка».",
-  Заливка: "Закрасить фигуру целиком, а не только контур.",
+  Заливка: "Вкл — сплошная заливка (fillRect/fillCircle). Выкл — только контур (drawRect/drawCircle).",
   "X начало": "X первой точки линии.",
   "Y начало": "Y первой точки линии.",
   "X конец": "X второй точки линии.",
@@ -374,7 +379,8 @@ const PROP_HELP = {
   Ширина: "Ширина прямоугольника в пикселях.",
   Высота: "Высота прямоугольника в пикселях.",
   Текст: "Строка, которая уйдёт в print / drawStr.",
-  "Размер шрифта": "Размер в редакторе. На плате обычно setTextSize ≈ fontSize/8 — правьте под библиотеку.",
+  "Размер шрифта": "Высота текста в пикселях на холсте (превью).",
+  "Режим текста": "setTextSize(1/2/3) для кода на дисплее. При смене режима высота превью подстраивается (~8 px × размер).",
 };
 
 /** Подсказка после удержания курсора ~10 с */
@@ -557,6 +563,25 @@ function propCheck(label, val, onChange) {
   return row;
 }
 
+function propSelect(label, val, options, onChange) {
+  const row = document.createElement("div");
+  row.className = "prop-row";
+  row.innerHTML = `<label>${label}</label>`;
+  const sel = document.createElement("select");
+  for (const o of options) {
+    const opt = document.createElement("option");
+    opt.value = String(o.value);
+    opt.textContent = o.label;
+    sel.appendChild(opt);
+  }
+  sel.value = String(val);
+  sel.addEventListener("change", () => onChange(sel.value));
+  row.appendChild(sel);
+  const help = PROP_HELP[label];
+  if (help) attachHelp(row, label, help);
+  return row;
+}
+
 function renderProps() {
   const el = selected();
   els.props.innerHTML = "";
@@ -618,8 +643,48 @@ function renderProps() {
       els.props.appendChild(
         propCheck("Инвертировать шкалу", !!el.invertValues, (v) => patch("invertValues", v))
       );
-      els.props.appendChild(propCheck("Подписи", el.showLabels, (v) => patch("showLabels", v)));
       els.props.appendChild(propCheck("Показать дугу", el.showArc !== false, (v) => patch("showArc", v)));
+      els.props.appendChild(
+        propCheck("Основные деления", el.showMajorTicks !== false, (v) => patch("showMajorTicks", v))
+      );
+      els.props.appendChild(
+        propCheck("Доп. деления", el.showMinorTicks !== false, (v) => patch("showMinorTicks", v))
+      );
+      els.props.appendChild(
+        propCheck("Цифровые значения", el.showLabels !== false, (v) => patch("showLabels", v))
+      );
+      els.props.appendChild(
+        propSelect(
+          "Режим шрифта",
+          el.labelTextSize ?? 1,
+          [
+            { value: 1, label: "setTextSize(1)" },
+            { value: 2, label: "setTextSize(2)" },
+            { value: 3, label: "setTextSize(3)" },
+          ],
+          (v) => {
+            const ts = Math.max(1, Math.min(3, Number(v) || 1));
+            el.labelTextSize = ts;
+            el.labelFontSize = ts * 8;
+            redraw();
+            renderProps();
+          }
+        )
+      );
+      els.props.appendChild(
+        propNum(
+          "Высота шрифта",
+          el.labelFontSize ?? (el.labelTextSize || 1) * 8,
+          (v) => {
+            const fs = Math.max(6, Math.round(v));
+            el.labelFontSize = fs;
+            el.labelTextSize = Math.max(1, Math.min(3, Math.round(fs / 8) || 1));
+            redraw();
+            renderProps();
+          },
+          { min: 6, max: 48 }
+        )
+      );
       els.props.appendChild(
         propNum("Толщина дуги", el.arcThickness ?? 2, (v) => patch("arcThickness", Math.max(1, Math.round(v))), {
           min: 1,
@@ -646,13 +711,20 @@ function renderProps() {
       els.props.appendChild(propColor("Цвет обводки", el.stroke, (v) => patch("stroke", v)));
       els.props.appendChild(propColor("Цвет заливки", el.fill, (v) => patch("fill", v)));
       break;
-    case "sector":
+    case "sector": {
+      const note = document.createElement("p");
+      note.className = "muted";
+      note.style.margin = "0 0 0.35rem";
+      note.textContent =
+        "Сектор — залитая зона от центра (как «красная зона» спидометра), не деления и не стрелка.";
+      els.props.appendChild(note);
       commonXY();
       els.props.appendChild(propNum("Радиус", el.r, (v) => patch("r", v), { min: 1 }));
       els.props.appendChild(propNum("Начало °", el.startAngle, (v) => patch("startAngle", v)));
       els.props.appendChild(propNum("Конец °", el.endAngle, (v) => patch("endAngle", v)));
       els.props.appendChild(propColor("Цвет", el.fill, (v) => patch("fill", v)));
       break;
+    }
     case "line":
       els.props.appendChild(propNum("X начало", el.x1, (v) => patch("x1", Math.round(v))));
       els.props.appendChild(propNum("Y начало", el.y1, (v) => patch("y1", Math.round(v))));
@@ -674,7 +746,38 @@ function renderProps() {
       els.props.appendChild(propNum("X", el.x, (v) => patch("x", Math.round(v))));
       els.props.appendChild(propNum("Y", el.y, (v) => patch("y", Math.round(v))));
       els.props.appendChild(propText("Текст", el.text, (v) => patch("text", v)));
-      els.props.appendChild(propNum("Размер шрифта", el.fontSize, (v) => patch("fontSize", v), { min: 6 }));
+      els.props.appendChild(
+        propSelect(
+          "Режим текста",
+          el.textSize ?? Math.max(1, Math.min(3, Math.round((el.fontSize || 16) / 8) || 2)),
+          [
+            { value: 1, label: "setTextSize(1)" },
+            { value: 2, label: "setTextSize(2)" },
+            { value: 3, label: "setTextSize(3)" },
+          ],
+          (v) => {
+            const ts = Math.max(1, Math.min(3, Number(v) || 1));
+            el.textSize = ts;
+            el.fontSize = ts * 8;
+            redraw();
+            renderProps();
+          }
+        )
+      );
+      els.props.appendChild(
+        propNum(
+          "Размер шрифта",
+          el.fontSize,
+          (v) => {
+            const fs = Math.max(6, Math.round(v));
+            el.fontSize = fs;
+            el.textSize = Math.max(1, Math.min(3, Math.round(fs / 8) || 1));
+            redraw();
+            renderProps();
+          },
+          { min: 6, max: 64 }
+        )
+      );
       els.props.appendChild(propColor("Цвет", el.fill, (v) => patch("fill", v)));
       break;
     default:
@@ -703,6 +806,24 @@ function canvasPoint(e) {
     x: (e.clientX - rect.left) / state.zoom,
     y: (e.clientY - rect.top) / state.zoom,
   };
+}
+
+function updateCursorPos(e) {
+  if (!els.cursorPos) return;
+  const p = canvasPoint(e);
+  const W = state.project.width;
+  const H = state.project.height;
+  if (p.x < 0 || p.y < 0 || p.x >= W || p.y >= H) {
+    els.cursorPos.textContent = "x: —  y: —";
+    return;
+  }
+  const x = Math.floor(p.x);
+  const y = Math.floor(p.y);
+  els.cursorPos.textContent = `x: ${x}  y: ${y}`;
+}
+
+function clearCursorPos() {
+  if (els.cursorPos) els.cursorPos.textContent = "x: —  y: —";
 }
 
 function hitTest(x, y) {
@@ -774,7 +895,13 @@ els.canvas.addEventListener("mousedown", (e) => {
   redraw();
 });
 
+els.canvas.addEventListener("mousemove", updateCursorPos);
+els.canvas.addEventListener("mouseleave", clearCursorPos);
+els.stage?.addEventListener("mousemove", updateCursorPos);
+els.stage?.addEventListener("mouseleave", clearCursorPos);
+
 window.addEventListener("mousemove", (e) => {
+  if (state.drag) updateCursorPos(e);
   if (!state.drag) return;
   const el = state.project.widgets.find((w) => w.id === state.drag.id);
   if (!el) return;

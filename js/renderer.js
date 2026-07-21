@@ -36,10 +36,11 @@ export function drawElement(ctx, el) {
       if (el.filled) {
         ctx.fillStyle = el.fill;
         ctx.fillRect(el.x, el.y, el.w, el.h);
+      } else {
+        ctx.strokeStyle = el.stroke || el.fill;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(el.x + 0.5, el.y + 0.5, el.w - 1, el.h - 1);
       }
-      ctx.strokeStyle = el.stroke || el.fill;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(el.x + 0.5, el.y + 0.5, el.w - 1, el.h - 1);
       break;
 
     case "circle":
@@ -48,10 +49,11 @@ export function drawElement(ctx, el) {
       if (el.filled) {
         ctx.fillStyle = el.fill;
         ctx.fill();
+      } else {
+        ctx.strokeStyle = el.stroke || el.fill;
+        ctx.lineWidth = 1;
+        ctx.stroke();
       }
-      ctx.strokeStyle = el.stroke || el.fill;
-      ctx.lineWidth = 1;
-      ctx.stroke();
       break;
 
     case "arc":
@@ -91,6 +93,8 @@ export function drawElement(ctx, el) {
         strokePath(ctx, arcPoints(el.cx, el.cy, el.rOuter, el.startAngle, el.endAngle, 64));
       }
       for (const t of tickPoints(el)) {
+        if (t.isMajor && el.showMajorTicks === false) continue;
+        if (!t.isMajor && el.showMinorTicks === false) continue;
         ctx.strokeStyle = t.isMajor ? el.majorColor : el.minorColor;
         ctx.lineWidth = t.isMajor ? 2 : 1;
         ctx.beginPath();
@@ -99,8 +103,9 @@ export function drawElement(ctx, el) {
         ctx.stroke();
       }
       if (el.showLabels) {
+        const fs = Math.max(6, el.labelFontSize || (el.labelTextSize || 1) * 8);
         ctx.fillStyle = el.labelColor;
-        ctx.font = "10px sans-serif";
+        ctx.font = `${fs}px sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         for (const lb of scaleLabels(el)) {
