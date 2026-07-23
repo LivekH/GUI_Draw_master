@@ -161,5 +161,8 @@ export function renderProject(ctx, project, { showGrid = true } = {}) {
     }
   }
 
-  for (const el of widgets) drawElement(ctx, el);
+  for (const el of widgets) {
+    if (el.visible === false) continue;
+    drawElement(ctx, el);
+  }
 }

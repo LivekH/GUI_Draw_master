@@ -92,8 +92,15 @@
       <div class="v-split" id="split-insp" title="Тяните, чтобы изменить ширину"></div>
       <aside class="inspector" id="inspector">
         <div class="insp-block">
-          <h2>Слои</h2>
+          <div class="layers-head">
+            <h2>Слои</h2>
+            <div class="layers-actions">
+              <button type="button" id="btn-group" class="ghost tiny" title="Объединить выделенные в группу (Ctrl+клик)">Группа</button>
+              <button type="button" id="btn-ungroup" class="ghost tiny" title="Разгруппировать">Разгруп.</button>
+            </div>
+          </div>
           <ul id="layers" class="layers"></ul>
+          <p class="muted layers-hint">Ctrl+клик — несколько · повторный клик на наложении — следующий элемент · глазик — скрыть</p>
         </div>
 
         <div class="insp-block grow">

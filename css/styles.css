@@ -607,6 +607,27 @@ html, body {
 
 .code-head h2 { margin-bottom: 0; }
 
+.layers-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  margin-bottom: 0.35rem;
+}
+
+.layers-head h2 { margin-bottom: 0; }
+
+.layers-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.layers-hint {
+  margin: 0.4rem 0 0;
+  font-size: 0.62rem;
+  line-height: 1.35;
+}
+
 .layers {
   list-style: none;
   display: flex;
@@ -615,15 +636,25 @@ html, body {
 }
 
 .layers li {
-  padding: 0.35rem 0.4rem;
+  padding: 0.28rem 0.35rem;
   border-radius: 4px;
   font-size: 0.75rem;
   cursor: pointer;
   color: var(--muted);
   display: flex;
-  justify-content: space-between;
+  align-items: center;
   gap: 0.3rem;
   border: 1px solid transparent;
+}
+
+.layers li.nested {
+  padding-left: 1.1rem;
+}
+
+.layers li.group-row {
+  font-weight: 600;
+  color: var(--text);
+  background: rgba(62, 207, 142, 0.06);
 }
 
 .layers li:hover { background: var(--elev); color: var(--text); }
@@ -633,10 +664,47 @@ html, body {
   color: var(--text);
 }
 
+.layers li.hidden-el {
+  opacity: 0.45;
+}
+
+.layers .vis {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--line);
+  background: var(--code-bg);
+  color: var(--muted);
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 0.7rem;
+  line-height: 1;
+  padding: 0;
+}
+
+.layers .vis:hover {
+  border-color: var(--accent-2);
+  color: var(--accent-2);
+}
+
+.layers .vis.off {
+  color: #e85d5d;
+  border-color: rgba(232, 93, 93, 0.4);
+}
+
+.layers .name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .layers .t {
   font-family: var(--mono);
   font-size: 0.6rem;
   opacity: 0.7;
+  flex-shrink: 0;
 }
 
 .props { display: flex; flex-direction: column; gap: 0.4rem; }

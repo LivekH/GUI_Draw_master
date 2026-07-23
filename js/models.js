@@ -164,16 +164,19 @@ export function createElement(type, width, height) {
   const d = defaults(type, width, height);
   d.id = nextId();
   d.name = `${d.name} ${_id - 1}`;
+  d.visible = true;
+  d.groupId = null;
   return d;
 }
 
 export function createProject() {
   resetIdCounter(1);
+  _gid = 1;
   const displayId = "tft_240x320";
   const orientationId = "portrait";
   const { w, h } = resolveSize(displayId, orientationId);
   return {
-    version: 2,
+    version: 3,
     name: "Untitled",
     displayId,
     orientationId,
@@ -182,7 +185,24 @@ export function createProject() {
     height: h,
     background: "#000000",
     widgets: [],
+    groups: [],
   };
+}
+
+let _gid = 1;
+export function nextGroupId() {
+  return `grp${_gid++}`;
+}
+export function resetGroupCounter(n = 1) {
+  _gid = n;
+}
+
+export function getGroup(project, groupId) {
+  return (project.groups || []).find((g) => g.id === groupId) || null;
+}
+
+export function groupMembers(project, groupId) {
+  return project.widgets.filter((w) => w.groupId === groupId);
 }
 
 /** Bounding box for hit-test / selection */

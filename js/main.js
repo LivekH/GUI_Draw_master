@@ -1,12 +1,12 @@
 import { DISPLAYS, ORIENTATIONS, LIBRARIES, filterLibraries, resolveSize, getDisplay } from "./catalog.js";
-import { TOOLS, createProject, createElement, elementBounds, resetIdCounter, nextId } from "./models.js";
+import { TOOLS, createProject, createElement, elementBounds, resetIdCounter, nextId, nextGroupId, resetGroupCounter, getGroup, groupMembers } from "./models.js";
 import { renderProject } from "./renderer.js";
 import { codegenObject, codegenScreen } from "./codegen.js";
 import { format565 } from "./color.js";
 
 const state = {
   project: createProject(),
-  selectedId: null,
+  selectedIds: [],
   zoom: 2,
   showGrid: true,
   drag: null,
@@ -54,7 +54,22 @@ function currentLib() {
 }
 
 function selected() {
-  return state.project.widgets.find((w) => w.id === state.selectedId) || null;
+  const id = state.selectedIds[state.selectedIds.length - 1];
+  if (!id) return null;
+  return state.project.widgets.find((w) => w.id === id) || null;
+}
+
+function isSelected(id) {
+  return state.selectedIds.includes(id);
+}
+
+function setSelection(ids) {
+  state.selectedIds = [...new Set(ids.filter(Boolean))];
+}
+
+function toggleSelection(id) {
+  if (isSelected(id)) setSelection(state.selectedIds.filter((x) => x !== id));
+  else setSelection([...state.selectedIds, id]);
 }
 
 function applyZoom() {
@@ -210,25 +225,47 @@ function renderBgSwatches() {
 }
 
 function updateSelbox() {
-  const el = selected();
-  if (!el) {
+  const ids = state.selectedIds;
+  if (!ids.length) {
     els.selbox.classList.add("hidden");
     return;
   }
-  const b = elementBounds(el);
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  let any = false;
+  for (const id of ids) {
+    const el = state.project.widgets.find((w) => w.id === id);
+    if (!el || el.visible === false) continue;
+    const b = elementBounds(el);
+    minX = Math.min(minX, b.x);
+    minY = Math.min(minY, b.y);
+    maxX = Math.max(maxX, b.x + b.w);
+    maxY = Math.max(maxY, b.y + b.h);
+    any = true;
+  }
+  if (!any) {
+    els.selbox.classList.add("hidden");
+    return;
+  }
   const z = state.zoom;
   els.selbox.classList.remove("hidden");
-  els.selbox.style.left = `${b.x * z}px`;
-  els.selbox.style.top = `${b.y * z}px`;
-  els.selbox.style.width = `${b.w * z}px`;
-  els.selbox.style.height = `${b.h * z}px`;
+  els.selbox.style.left = `${minX * z}px`;
+  els.selbox.style.top = `${minY * z}px`;
+  els.selbox.style.width = `${(maxX - minX) * z}px`;
+  els.selbox.style.height = `${(maxY - minY) * z}px`;
 }
 
 function refreshCode() {
   const lib = currentLib();
   els.libTag.textContent = lib.label;
   const el = selected();
-  els.codeEl.textContent = el ? codegenObject(el, lib) : "// выберите элемент на холсте";
+  if (state.selectedIds.length > 1) {
+    els.codeEl.textContent = `// выделено элементов: ${state.selectedIds.length}\n// в коде экрана группа будет одним блоком с комментариями`;
+  } else {
+    els.codeEl.textContent = el ? codegenObject(el, lib) : "// выберите элемент на холсте";
+  }
   els.codeScreen.textContent = codegenScreen(state.project, lib);
 }
 
@@ -311,7 +348,7 @@ function renderToolbox() {
     btn.addEventListener("click", () => {
       const el = createElement(t.type, state.project.width, state.project.height);
       state.project.widgets.push(el);
-      state.selectedId = el.id;
+      setSelection([el.id]);
       redraw();
     });
     attachHelp(btn, t.label, t.hint);
@@ -319,17 +356,89 @@ function renderToolbox() {
   }
 }
 
+function makeVisBtn(visible, onToggle) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "vis" + (visible === false ? " off" : "");
+  btn.title = visible === false ? "Показать" : "Скрыть";
+  btn.textContent = visible === false ? "⊘" : "◉";
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    onToggle();
+  });
+  return btn;
+}
+
 function renderLayers() {
   els.layers.innerHTML = "";
-  for (const w of [...state.project.widgets].reverse()) {
+  if (!state.project.groups) state.project.groups = [];
+  const emitted = new Set();
+
+  const addElRow = (w, nested) => {
     const li = document.createElement("li");
-    li.className = w.id === state.selectedId ? "selected" : "";
-    li.innerHTML = `<span>${w.name}</span><span class="t">${w.type}</span>`;
-    li.addEventListener("click", () => {
-      state.selectedId = w.id;
+    li.className =
+      (isSelected(w.id) ? "selected " : "") +
+      (nested ? "nested " : "") +
+      (w.visible === false ? "hidden-el" : "");
+    const name = document.createElement("span");
+    name.className = "name";
+    name.textContent = w.name;
+    const typ = document.createElement("span");
+    typ.className = "t";
+    typ.textContent = w.type;
+    li.append(makeVisBtn(w.visible !== false, () => {
+      w.visible = w.visible === false;
+      redraw();
+    }), name, typ);
+    li.addEventListener("click", (e) => {
+      if (e.ctrlKey || e.metaKey) toggleSelection(w.id);
+      else setSelection([w.id]);
       redraw();
     });
     els.layers.appendChild(li);
+  };
+
+  for (const w of [...state.project.widgets].reverse()) {
+    if (emitted.has(w.id)) continue;
+    if (w.groupId) {
+      const members = groupMembers(state.project, w.groupId);
+      for (const m of members) emitted.add(m.id);
+      const g = getGroup(state.project, w.groupId);
+      const li = document.createElement("li");
+      const allSelected = members.length && members.every((m) => isSelected(m.id));
+      li.className = "group-row" + (allSelected ? " selected" : "");
+      const name = document.createElement("span");
+      name.className = "name";
+      name.textContent = `▸ ${g?.name || "Группа"}`;
+      const typ = document.createElement("span");
+      typ.className = "t";
+      typ.textContent = `${members.length}`;
+      const anyVisible = members.some((m) => m.visible !== false);
+      li.append(
+        makeVisBtn(anyVisible, () => {
+          const show = !anyVisible;
+          for (const m of members) m.visible = show;
+          redraw();
+        }),
+        name,
+        typ
+      );
+      li.addEventListener("click", (e) => {
+        const ids = members.map((m) => m.id);
+        if (e.ctrlKey || e.metaKey) {
+          for (const id of ids) {
+            if (!isSelected(id)) state.selectedIds.push(id);
+          }
+          setSelection(state.selectedIds);
+        } else setSelection(ids);
+        redraw();
+      });
+      els.layers.appendChild(li);
+      for (const m of [...members].reverse()) addElRow(m, true);
+    } else {
+      emitted.add(w.id);
+      addElRow(w, false);
+    }
   }
 }
 
@@ -826,43 +935,110 @@ function clearCursorPos() {
   if (els.cursorPos) els.cursorPos.textContent = "x: —  y: —";
 }
 
-function hitTest(x, y) {
+function hitsAt(x, y) {
+  const hits = [];
   for (let i = state.project.widgets.length - 1; i >= 0; i--) {
     const el = state.project.widgets[i];
+    if (el.visible === false) continue;
     const b = elementBounds(el);
     const pad = 3;
-    if (x >= b.x - pad && x <= b.x + b.w + pad && y >= b.y - pad && y <= b.y + b.h + pad) return el;
+    if (x >= b.x - pad && x <= b.x + b.w + pad && y >= b.y - pad && y <= b.y + b.h + pad) {
+      hits.push(el);
+    }
   }
-  return null;
+  return hits;
 }
 
 function deleteSelected() {
-  if (!state.selectedId) return;
-  state.project.widgets = state.project.widgets.filter((w) => w.id !== state.selectedId);
-  state.selectedId = null;
+  if (!state.selectedIds.length) return;
+  const kill = new Set(state.selectedIds);
+  state.project.widgets = state.project.widgets.filter((w) => !kill.has(w.id));
+  // убрать пустые группы
+  if (state.project.groups) {
+    state.project.groups = state.project.groups.filter((g) =>
+      state.project.widgets.some((w) => w.groupId === g.id)
+    );
+  }
+  setSelection([]);
   redraw();
 }
 
 function duplicateSelected() {
-  const el = selected();
-  if (!el) return;
-  const copy = structuredClone(el);
-  copy.id = nextId();
-  copy.name = `${el.name} copy`;
-  if ("cx" in copy) {
-    copy.cx += 8;
-    copy.cy += 8;
-  } else if ("x" in copy) {
-    copy.x += 8;
-    copy.y += 8;
-  } else if ("x1" in copy) {
-    copy.x1 += 8;
-    copy.y1 += 8;
-    copy.x2 += 8;
-    copy.y2 += 8;
+  if (!state.selectedIds.length) return;
+  const src = state.project.widgets.filter((w) => isSelected(w.id));
+  if (!src.length) return;
+
+  const groupMap = new Map();
+  const newIds = [];
+  for (const el of src) {
+    const copy = structuredClone(el);
+    copy.id = nextId();
+    copy.name = `${el.name} copy`;
+    if (el.groupId) {
+      if (!groupMap.has(el.groupId)) {
+        const oldG = getGroup(state.project, el.groupId);
+        const gid = nextGroupId();
+        if (!state.project.groups) state.project.groups = [];
+        state.project.groups.push({ id: gid, name: `${oldG?.name || "Группа"} copy` });
+        groupMap.set(el.groupId, gid);
+      }
+      copy.groupId = groupMap.get(el.groupId);
+    }
+    if ("cx" in copy) {
+      copy.cx += 12;
+      copy.cy += 12;
+    } else if ("x" in copy) {
+      copy.x += 12;
+      copy.y += 12;
+    } else if ("x1" in copy) {
+      copy.x1 += 12;
+      copy.y1 += 12;
+      copy.x2 += 12;
+      copy.y2 += 12;
+    }
+    state.project.widgets.push(copy);
+    newIds.push(copy.id);
   }
-  state.project.widgets.push(copy);
-  state.selectedId = copy.id;
+  setSelection(newIds);
+  redraw();
+}
+
+function createGroupFromSelection() {
+  if (state.selectedIds.length < 2) {
+    alert("Выделите минимум 2 элемента:\nCtrl+клик по слоям или на холсте.");
+    return;
+  }
+  const name = prompt("Имя группы (например «Вольтметр»)", "Прибор");
+  if (name == null || !String(name).trim()) return;
+  const gid = nextGroupId();
+  if (!state.project.groups) state.project.groups = [];
+  state.project.groups.push({ id: gid, name: String(name).trim() });
+  for (const id of state.selectedIds) {
+    const w = state.project.widgets.find((x) => x.id === id);
+    if (w) w.groupId = gid;
+  }
+  redraw();
+}
+
+function ungroupSelection() {
+  const ids = state.selectedIds.length
+    ? state.selectedIds
+    : [];
+  if (!ids.length) {
+    alert("Выберите группу или её элементы.");
+    return;
+  }
+  const gids = new Set();
+  for (const id of ids) {
+    const w = state.project.widgets.find((x) => x.id === id);
+    if (w?.groupId) {
+      gids.add(w.groupId);
+      w.groupId = null;
+    }
+  }
+  if (state.project.groups) {
+    state.project.groups = state.project.groups.filter((g) => !gids.has(g.id));
+  }
   redraw();
 }
 
@@ -884,14 +1060,26 @@ function moveElement(el, dx, dy) {
 els.canvas.addEventListener("mousedown", (e) => {
   if (e.button !== 0 || e.altKey) return;
   const p = canvasPoint(e);
-  const hit = hitTest(p.x, p.y);
-  if (hit) {
-    state.selectedId = hit.id;
-    state.drag = { id: hit.id, lx: p.x, ly: p.y };
-  } else {
-    state.selectedId = null;
+  const hits = hitsAt(p.x, p.y);
+  if (!hits.length) {
+    setSelection([]);
     state.drag = null;
+    redraw();
+    return;
   }
+
+  let pick = hits[0];
+  // повторный клик по тому же месту — следующий элемент под курсором (удобно при наложении)
+  if (!e.ctrlKey && !e.metaKey && state.selectedIds.length === 1 && hits.length > 1) {
+    const cur = state.selectedIds[0];
+    const idx = hits.findIndex((h) => h.id === cur);
+    if (idx >= 0) pick = hits[(idx + 1) % hits.length];
+  }
+
+  if (e.ctrlKey || e.metaKey) toggleSelection(pick.id);
+  else setSelection([pick.id]);
+
+  state.drag = { ids: [...state.selectedIds], lx: p.x, ly: p.y };
   redraw();
 });
 
@@ -903,10 +1091,13 @@ els.stage?.addEventListener("mouseleave", clearCursorPos);
 window.addEventListener("mousemove", (e) => {
   if (state.drag) updateCursorPos(e);
   if (!state.drag) return;
-  const el = state.project.widgets.find((w) => w.id === state.drag.id);
-  if (!el) return;
   const p = canvasPoint(e);
-  moveElement(el, p.x - state.drag.lx, p.y - state.drag.ly);
+  const dx = p.x - state.drag.lx;
+  const dy = p.y - state.drag.ly;
+  for (const id of state.drag.ids) {
+    const el = state.project.widgets.find((w) => w.id === id);
+    if (el) moveElement(el, dx, dy);
+  }
   state.drag.lx = p.x;
   state.drag.ly = p.y;
   redraw();
@@ -925,6 +1116,10 @@ window.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d") {
     e.preventDefault();
     duplicateSelected();
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "g") {
+    e.preventDefault();
+    createGroupFromSelection();
   }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
     e.preventDefault();
@@ -1129,11 +1324,16 @@ $("btn-new").addEventListener("click", () => {
   state.project.orientationId = o;
   state.project.libraryId = lib;
   applyDisplayCascade();
-  state.selectedId = null;
+  setSelection([]);
   els.display.value = d;
   els.orient.value = o;
   redraw();
 });
+
+$("btn-group")?.addEventListener("click", createGroupFromSelection);
+$("btn-ungroup")?.addEventListener("click", ungroupSelection);
+attachHelp($("btn-group"), "Группа", "Объединить выделенные элементы (Ctrl+клик) в одну группу — удобно копировать прибор целиком.");
+attachHelp($("btn-ungroup"), "Разгруппировать", "Убрать выбранные элементы из группы.");
 
 $("btn-open").addEventListener("click", () => els.fileOpen.click());
 els.fileOpen.addEventListener("change", async () => {
@@ -1142,14 +1342,25 @@ els.fileOpen.addEventListener("change", async () => {
   try {
     const data = JSON.parse(await file.text());
     if (!data.width || !Array.isArray(data.widgets)) throw new Error("Неверный JSON");
+    if (!data.groups) data.groups = [];
+    for (const w of data.widgets) {
+      if (w.visible === undefined) w.visible = true;
+      if (w.groupId === undefined) w.groupId = null;
+    }
     state.project = data;
-    state.selectedId = null;
+    setSelection([]);
     let max = 0;
+    let maxG = 0;
     for (const w of data.widgets) {
       const m = /^el(\d+)$/.exec(w.id || "");
       if (m) max = Math.max(max, Number(m[1]));
     }
+    for (const g of data.groups) {
+      const m = /^grp(\d+)$/.exec(g.id || "");
+      if (m) maxG = Math.max(maxG, Number(m[1]));
+    }
     resetIdCounter(max + 1);
+    resetGroupCounter(maxG + 1);
     els.display.value = data.displayId || "tft_240x320";
     els.orient.value = data.orientationId || "portrait";
     fillLibraries();

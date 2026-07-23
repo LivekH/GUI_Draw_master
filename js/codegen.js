@@ -523,7 +523,27 @@ export function codegenScreen(project, lib) {
   }
   lines.push(`  // цвет фона`);
   push(lines, indent(api.fillScreen(project.background || "#000000")));
+  const emittedGroups = new Set();
   for (const obj of project.widgets) {
+    if (obj.visible === false) continue;
+    if (obj.groupId) {
+      if (emittedGroups.has(obj.groupId)) continue;
+      emittedGroups.add(obj.groupId);
+      const g = (project.groups || []).find((x) => x.id === obj.groupId);
+      const gname = g?.name || obj.groupId;
+      lines.push(``);
+      lines.push(`  // ===== группа: ${gname} =====`);
+      for (const m of project.widgets) {
+        if (m.groupId !== obj.groupId || m.visible === false) continue;
+        lines.push(``);
+        lines.push(`  // ${m.name || m.type}`);
+        const chunk = [];
+        emitObject(m, lib, chunk, api);
+        for (const ln of chunk) push(lines, indent(ln));
+      }
+      lines.push(`  // ===== /${gname} =====`);
+      continue;
+    }
     lines.push(``);
     lines.push(`  // ${obj.name || obj.type}`);
     const chunk = [];
