@@ -1107,25 +1107,47 @@ window.addEventListener("mouseup", () => {
   state.drag = null;
 });
 
-window.addEventListener("keydown", (e) => {
-  if (e.target.matches("input, textarea, select")) return;
-  if (e.key === "Delete" || e.key === "Backspace") {
-    e.preventDefault();
-    deleteSelected();
-  }
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d") {
-    e.preventDefault();
-    duplicateSelected();
-  }
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "g") {
-    e.preventDefault();
-    createGroupFromSelection();
-  }
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
-    e.preventDefault();
-    saveProject();
-  }
-});
+/** Горячие клавиши по физ. клавише (e.code), чтобы работало и на русской раскладке */
+window.addEventListener(
+  "keydown",
+  (e) => {
+    if (e.target.matches("input, textarea, select")) return;
+
+    const mod = e.ctrlKey || e.metaKey;
+    const code = e.code;
+
+    if (e.key === "Delete" || e.key === "Backspace") {
+      e.preventDefault();
+      e.stopPropagation();
+      deleteSelected();
+      return;
+    }
+
+    if (mod && code === "KeyD") {
+      // иначе браузер: «Добавить в закладки»
+      e.preventDefault();
+      e.stopPropagation();
+      duplicateSelected();
+      return;
+    }
+
+    if (mod && code === "KeyG") {
+      e.preventDefault();
+      e.stopPropagation();
+      createGroupFromSelection();
+      return;
+    }
+
+    if (mod && code === "KeyS") {
+      // иначе браузер: «Сохранить страницу»
+      e.preventDefault();
+      e.stopPropagation();
+      saveProject();
+      return;
+    }
+  },
+  true // capture — перехватить до действий браузера
+);
 
 function copyText(text) {
   navigator.clipboard.writeText(text).then(
