@@ -50,35 +50,59 @@ export const DISPLAYS = [
 ];
 
 /**
- * Libraries grouped by API family for code generation.
- * `apis`: which display kinds they typically support
- * `family`: codegen adapter id
+ * Libraries for code generation.
+ * `obj` + `access` — как в типичном sketch:
+ *   TFT_eSPI:     TFT_eSPI tft;           → tft.
+ *   Arduino_GFX:  Arduino_GFX *gfx = …;   → gfx->
+ *   LovyanGFX:    LGFX lcd;               → lcd.
+ *   U8g2:         U8G2_… u8g2(…);         → u8g2.
+ * Имя/доступ можно переопределить в проекте (поле «Объект в коде»).
  */
 export const LIBRARIES = [
   // —— Adafruit GFX ecosystem ——
-  { id: "adafruit_gfx", label: "Adafruit GFX (+ ST77xx / ILI9341 / …)", family: "adafruit_gfx", kinds: ["tft", "oled_color"], obj: "tft", color: "rgb565" },
-  { id: "adafruit_ssd1306", label: "Adafruit SSD1306 (OLED)", family: "adafruit_gfx", kinds: ["oled"], obj: "display", color: "mono" },
-  { id: "adafruit_sh110x", label: "Adafruit SH110X (OLED)", family: "adafruit_gfx", kinds: ["oled"], obj: "display", color: "mono" },
-  { id: "adafruit_ssd1351", label: "Adafruit SSD1351 (OLED color)", family: "adafruit_gfx", kinds: ["oled_color"], obj: "tft", color: "rgb565" },
-  { id: "adafruit_ssd1331", label: "Adafruit SSD1331 (OLED color)", family: "adafruit_gfx", kinds: ["oled_color"], obj: "tft", color: "rgb565" },
+  { id: "adafruit_gfx", label: "Adafruit GFX (+ ST77xx / ILI9341 / …)", family: "adafruit_gfx", kinds: ["tft", "oled_color"], obj: "tft", access: ".", color: "rgb565" },
+  { id: "adafruit_ssd1306", label: "Adafruit SSD1306 (OLED)", family: "adafruit_gfx", kinds: ["oled"], obj: "display", access: ".", color: "mono" },
+  { id: "adafruit_sh110x", label: "Adafruit SH110X (OLED)", family: "adafruit_gfx", kinds: ["oled"], obj: "display", access: ".", color: "mono" },
+  { id: "adafruit_ssd1351", label: "Adafruit SSD1351 (OLED color)", family: "adafruit_gfx", kinds: ["oled_color"], obj: "tft", access: ".", color: "rgb565" },
+  { id: "adafruit_ssd1331", label: "Adafruit SSD1331 (OLED color)", family: "adafruit_gfx", kinds: ["oled_color"], obj: "tft", access: ".", color: "rgb565" },
 
   // —— Popular TFT ——
-  { id: "tft_espi", label: "TFT_eSPI (Bodmer)", family: "tft_espi", kinds: ["tft", "oled_color"], obj: "tft", color: "rgb565" },
-  { id: "arduino_gfx", label: "Arduino_GFX (moononournation)", family: "arduino_gfx", kinds: ["tft", "oled", "oled_color"], obj: "gfx", color: "rgb565" },
-  { id: "lovyangfx", label: "LovyanGFX", family: "lovyangfx", kinds: ["tft", "oled_color"], obj: "lcd", color: "rgb565" },
-  { id: "mcufriend", label: "MCUFRIEND_kbv", family: "mcufriend", kinds: ["tft"], obj: "tft", color: "rgb565" },
-  { id: "utft", label: "UTFT", family: "utft", kinds: ["tft"], obj: "myGLCD", color: "rgb565_utft" },
+  { id: "tft_espi", label: "TFT_eSPI (Bodmer)", family: "tft_espi", kinds: ["tft", "oled_color"], obj: "tft", access: ".", color: "rgb565" },
+  { id: "arduino_gfx", label: "Arduino_GFX (moononournation)", family: "arduino_gfx", kinds: ["tft", "oled", "oled_color"], obj: "gfx", access: "->", color: "rgb565" },
+  { id: "lovyangfx", label: "LovyanGFX", family: "lovyangfx", kinds: ["tft", "oled_color"], obj: "lcd", access: ".", color: "rgb565" },
+  { id: "mcufriend", label: "MCUFRIEND_kbv", family: "mcufriend", kinds: ["tft"], obj: "tft", access: ".", color: "rgb565" },
+  { id: "utft", label: "UTFT", family: "utft", kinds: ["tft"], obj: "myGLCD", access: ".", color: "rgb565_utft" },
 
   // —— OLED-focused ——
-  { id: "u8g2", label: "U8g2 (olikraus) — OLED/LCD", family: "u8g2", kinds: ["oled", "oled_color", "tft"], obj: "u8g2", color: "mono" },
-  { id: "u8x8", label: "U8x8 (текстовый режим U8g2)", family: "u8x8", kinds: ["oled"], obj: "u8x8", color: "mono" },
-  { id: "ssd1306_wire", label: "ThingPulse OLEDDisplay (SSD1306Wire)", family: "ssd1306_wire", kinds: ["oled"], obj: "display", color: "mono" },
-  { id: "tiny4koled", label: "Tiny4kOLED", family: "tiny4koled", kinds: ["oled"], obj: "oled", color: "mono" },
+  { id: "u8g2", label: "U8g2 (olikraus) — OLED/LCD", family: "u8g2", kinds: ["oled", "oled_color", "tft"], obj: "u8g2", access: ".", color: "mono" },
+  { id: "u8x8", label: "U8x8 (текстовый режим U8g2)", family: "u8x8", kinds: ["oled"], obj: "u8x8", access: ".", color: "mono" },
+  { id: "ssd1306_wire", label: "ThingPulse OLEDDisplay (SSD1306Wire)", family: "ssd1306_wire", kinds: ["oled"], obj: "display", access: ".", color: "mono" },
+  { id: "tiny4koled", label: "Tiny4kOLED", family: "tiny4koled", kinds: ["oled"], obj: "oled", access: ".", color: "mono" },
 
   // —— Higher-level / other ——
-  { id: "lvgl", label: "LVGL (canvas / draw API)", family: "lvgl", kinds: ["tft", "oled", "oled_color"], obj: "draw", color: "rgb565" },
-  { id: "ucglib", label: "Ucglib", family: "ucglib", kinds: ["tft", "oled_color"], obj: "ucg", color: "rgb565" },
+  { id: "lvgl", label: "LVGL (canvas / draw API)", family: "lvgl", kinds: ["tft", "oled", "oled_color"], obj: "draw", access: ".", color: "rgb565" },
+  { id: "ucglib", label: "Ucglib", family: "ucglib", kinds: ["tft", "oled_color"], obj: "ucg", access: ".", color: "rgb565" },
 ];
+
+/** Префикс вызова: "gfx->" / "tft." */
+export function libCallPrefix(lib, project) {
+  const raw = (project?.codeObj ?? lib.obj ?? "tft").toString().trim();
+  const name = raw.replace(/(\.|->)+\s*$/g, "").replace(/[^\w]/g, "") || lib.obj || "tft";
+  const access =
+    project?.codeAccess === "->" || project?.codeAccess === "."
+      ? project.codeAccess
+      : lib.access === "->"
+        ? "->"
+        : ".";
+  return name + access;
+}
+
+/** Подставить obj/access проекта из библиотеки (при смене lib или новом проекте) */
+export function syncCodeObjFromLib(project, lib) {
+  if (!project || !lib) return;
+  project.codeObj = lib.obj || "tft";
+  project.codeAccess = lib.access === "->" ? "->" : ".";
+}
 
 export function getDisplay(id) {
   return DISPLAYS.find((d) => d.id === id) || DISPLAYS.find((d) => d.id === "tft_240x320");

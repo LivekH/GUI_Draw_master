@@ -100,7 +100,29 @@ html, body {
   min-width: 140px;
 }
 
-.field-wide { min-width: 260px; flex: 1; }
+.field-wide { min-width: 220px; flex: 1; }
+
+.field-access {
+  min-width: 72px;
+}
+
+.field-access select {
+  min-width: 64px;
+  font-family: var(--mono, ui-monospace, Consolas, monospace);
+  font-weight: 600;
+}
+
+#inp-code-obj {
+  width: 5.5rem;
+  min-width: 4.5rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--elev);
+  color: var(--text);
+  font-family: var(--mono, ui-monospace, Consolas, monospace);
+  font-size: 0.85rem;
+}
 
 .field-key {
   font-size: 0.65rem;

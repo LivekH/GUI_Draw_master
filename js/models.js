@@ -204,6 +204,8 @@ export function createProject() {
     displayId,
     orientationId,
     libraryId: "tft_espi",
+    codeObj: "tft",
+    codeAccess: ".",
     width: w,
     height: h,
     background: "#000000",

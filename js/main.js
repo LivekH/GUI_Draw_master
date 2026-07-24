@@ -1,4 +1,4 @@
-import { DISPLAYS, ORIENTATIONS, LIBRARIES, filterLibraries, resolveSize, getDisplay } from "./catalog.js";
+import { DISPLAYS, ORIENTATIONS, LIBRARIES, filterLibraries, resolveSize, getDisplay, syncCodeObjFromLib } from "./catalog.js";
 import { TOOLS, createProject, createElement, elementBounds, resetIdCounter, nextId, nextGroupId, resetGroupCounter, getGroup, groupMembers } from "./models.js";
 import { renderProject } from "./renderer.js";
 import { codegenObject, codegenScreen } from "./codegen.js";
@@ -33,6 +33,8 @@ const els = {
   display: $("sel-display"),
   orient: $("sel-orient"),
   library: $("sel-library"),
+  codeObj: $("inp-code-obj"),
+  codeAccess: $("sel-code-access"),
   sizeBadge: $("size-badge"),
   canvas: $("screen"),
   stage: $("stage"),
@@ -266,6 +268,18 @@ function updateSelbox() {
   els.selbox.style.height = `${(maxY - minY) * z}px`;
 }
 
+function syncCodeObjUi(fromLib = false) {
+  const lib = currentLib();
+  if (fromLib || !state.project.codeObj) {
+    syncCodeObjFromLib(state.project, lib);
+  }
+  if (!state.project.codeAccess) {
+    state.project.codeAccess = lib.access === "->" ? "->" : ".";
+  }
+  if (els.codeObj) els.codeObj.value = state.project.codeObj || lib.obj || "tft";
+  if (els.codeAccess) els.codeAccess.value = state.project.codeAccess === "->" ? "->" : ".";
+}
+
 function refreshCode() {
   const lib = currentLib();
   els.libTag.textContent = lib.label;
@@ -273,7 +287,7 @@ function refreshCode() {
   if (state.selectedIds.length > 1) {
     els.codeEl.textContent = `// выделено элементов: ${state.selectedIds.length}\n// в коде экрана группа будет одним блоком с комментариями`;
   } else {
-    els.codeEl.textContent = el ? codegenObject(el, lib) : "// выберите элемент на холсте";
+    els.codeEl.textContent = el ? codegenObject(el, lib, state.project) : "// выберите элемент на холсте";
   }
   els.codeScreen.textContent = codegenScreen(state.project, lib);
 }
@@ -331,8 +345,10 @@ function fillLibraries() {
   }
   if (!list.find((l) => l.id === state.project.libraryId)) {
     state.project.libraryId = list[0]?.id || "adafruit_gfx";
+    syncCodeObjFromLib(state.project, list[0] || LIBRARIES[0]);
   }
   els.library.value = state.project.libraryId;
+  syncCodeObjUi(false);
 }
 
 function applyDisplayCascade() {
@@ -1327,8 +1343,20 @@ els.orient.addEventListener("change", () => {
 
 els.library.addEventListener("change", () => {
   state.project.libraryId = els.library.value;
+  syncCodeObjUi(true);
   refreshCode();
   renderProps();
+});
+
+els.codeObj?.addEventListener("input", () => {
+  const v = (els.codeObj.value || "").trim().replace(/(\.|->)+\s*$/g, "") || currentLib().obj || "tft";
+  state.project.codeObj = v;
+  refreshCode();
+});
+
+els.codeAccess?.addEventListener("change", () => {
+  state.project.codeAccess = els.codeAccess.value === "->" ? "->" : ".";
+  refreshCode();
 });
 
 $("btn-zoom-in").addEventListener("click", () => {
@@ -1525,6 +1553,8 @@ $("btn-new").addEventListener("click", () => {
   state.project.displayId = d;
   state.project.orientationId = o;
   state.project.libraryId = lib;
+  syncCodeObjFromLib(state.project, currentLib());
+  syncCodeObjUi(false);
   applyDisplayCascade();
   setSelection([]);
   els.display.value = d;
@@ -1568,6 +1598,10 @@ els.fileOpen.addEventListener("change", async () => {
     els.orient.value = data.orientationId || "portrait";
     fillLibraries();
     els.library.value = data.libraryId || state.project.libraryId;
+    if (!state.project.codeObj || !state.project.codeAccess) {
+      syncCodeObjFromLib(state.project, currentLib());
+    }
+    syncCodeObjUi(false);
     await Promise.all(
       state.project.widgets.filter((w) => w.type === "bitmap" && w.srcDataUrl).map(refreshBitmapElement)
     );
@@ -1599,7 +1633,17 @@ attachHelp(
 attachHelp(
   els.library.closest(".field") || els.library,
   "Библиотека",
-  "Под какую draw-библиотеку генерировать код (TFT_eSPI, Adafruit GFX, U8g2…). Список зависит от типа дисплея."
+  "Под какую draw-библиотеку генерировать код (TFT_eSPI, Adafruit GFX, U8g2…). Список зависит от типа дисплея. Вместе с библиотекой подставляется типичное имя объекта (tft. / gfx-> / lcd.)."
+);
+attachHelp(
+  els.codeObj?.closest(".field") || els.codeObj,
+  "Объект в коде",
+  "Имя переменной дисплея в вашем sketch. Arduino_GFX обычно gfx-> (указатель); если у вас tft-> — напишите tft и выберите «->». TFT_eSPI / Adafruit — чаще tft."
+);
+attachHelp(
+  els.codeAccess?.closest(".field") || els.codeAccess,
+  "Доступ . или ->",
+  "Точка — объект на стеке (TFT_eSPI tft; → tft.). Стрелка — указатель (Arduino_GFX *gfx → gfx->)."
 );
 attachHelp($("btn-new"), "Новый", "Очистить проект и начать с пустого экрана.");
 attachHelp($("btn-open"), "Открыть", "Загрузить ранее сохранённый JSON проекта.");
@@ -1608,4 +1652,5 @@ attachHelp($("btn-code"), "Код экрана", "Показать / скрыт�
 attachHelp($("btn-copy-all"), "Копировать код", "Скопировать код всего экрана в буфер обмена.");
 attachHelp($("btn-grid"), "Сетка", "Включить / выключить пиксельную сетку на холсте.");
 
+syncCodeObjUi(false);
 redraw();

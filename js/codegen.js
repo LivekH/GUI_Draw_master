@@ -3,6 +3,7 @@
  */
 import { format565, formatUtftColor, isOn, hexToRgb } from "./color.js";
 import { bitsToCArray, rgb565ToCArray, safeArrayName } from "./bitmap.js";
+import { libCallPrefix } from "./catalog.js";
 
 export function polar(cx, cy, r, deg) {
   const a = ((deg - 90) * Math.PI) / 180;
@@ -227,30 +228,30 @@ function emitSector(api, cx, cy, r, a0, a1, col, lines) {
 function gfxBase(t, c, libLabel) {
   return {
     libLabel,
-    setRotation: (r) => `${t}.setRotation(${r});`,
-    fillScreen: (bg) => `${t}.fillScreen(${c(bg)});`,
-    line: (x1, y1, x2, y2, col) => `${t}.drawLine(${x1}, ${y1}, ${x2}, ${y2}, ${c(col)});`,
+    setRotation: (r) => `${t}setRotation(${r});`,
+    fillScreen: (bg) => `${t}fillScreen(${c(bg)});`,
+    line: (x1, y1, x2, y2, col) => `${t}drawLine(${x1}, ${y1}, ${x2}, ${y2}, ${c(col)});`,
     rect: (x, y, w, h, col, fill) =>
       fill
-        ? `${t}.fillRect(${x}, ${y}, ${w}, ${h}, ${c(col)});`
-        : `${t}.drawRect(${x}, ${y}, ${w}, ${h}, ${c(col)});`,
+        ? `${t}fillRect(${x}, ${y}, ${w}, ${h}, ${c(col)});`
+        : `${t}drawRect(${x}, ${y}, ${w}, ${h}, ${c(col)});`,
     circle: (cx, cy, r, col, fill) =>
       fill
-        ? `${t}.fillCircle(${cx}, ${cy}, ${r}, ${c(col)});`
-        : `${t}.drawCircle(${cx}, ${cy}, ${r}, ${c(col)});`,
+        ? `${t}fillCircle(${cx}, ${cy}, ${r}, ${c(col)});`
+        : `${t}drawCircle(${cx}, ${cy}, ${r}, ${c(col)});`,
     text: (x, y, text, col, size) => [
-      `${t}.setTextColor(${c(col)});`,
-      `${t}.setTextSize(${size});`,
-      `${t}.setCursor(${x}, ${y});`,
-      `${t}.print("${esc(text)}");`,
+      `${t}setTextColor(${c(col)});`,
+      `${t}setTextSize(${size});`,
+      `${t}setCursor(${x}, ${y});`,
+      `${t}print("${esc(text)}");`,
     ],
-    bitmap: (x, y, name, w, h, col) => `${t}.drawBitmap(${x}, ${y}, ${name}, ${w}, ${h}, ${c(col)});`,
-    bitmapRgb: (x, y, name, w, h) => `${t}.drawRGBBitmap(${x}, ${y}, ${name}, ${w}, ${h});`,
+    bitmap: (x, y, name, w, h, col) => `${t}drawBitmap(${x}, ${y}, ${name}, ${w}, ${h}, ${c(col)});`,
+    bitmapRgb: (x, y, name, w, h) => `${t}drawRGBBitmap(${x}, ${y}, ${name}, ${w}, ${h});`,
   };
 }
 
-function apiFor(lib) {
-  const t = lib.obj;
+function apiFor(lib, project = null) {
+  const t = libCallPrefix(lib, project);
   const c = (h) => colorExpr(lib, h);
   const family = lib.family;
   const label = lib.label || family;
@@ -259,13 +260,13 @@ function apiFor(lib) {
     return {
       ...gfxBase(t, c, label),
       wideLine: (x1, y1, x2, y2, w, col) =>
-        `${t}.drawWideLine(${x1}, ${y1}, ${x2}, ${y2}, ${w}, ${c(col)});`,
+        `${t}drawWideLine(${x1}, ${y1}, ${x2}, ${y2}, ${w}, ${c(col)});`,
       // drawArc(x,y, r_outer, r_inner, start, end, fg, bg, smooth)
       arc: (cx, cy, r0, r1, a0, a1, col) =>
-        `${t}.drawArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)}, ${c(col)}, false);`,
+        `${t}drawArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)}, ${c(col)}, false);`,
       fillArc: (cx, cy, r0, r1, a0, a1, col) =>
-        `${t}.drawArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)}, ${c(col)}, false);`,
-      bitmapRgb: (x, y, name, w, h) => `${t}.pushImage(${x}, ${y}, ${w}, ${h}, ${name});`,
+        `${t}drawArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)}, ${c(col)}, false);`,
+      bitmapRgb: (x, y, name, w, h) => `${t}pushImage(${x}, ${y}, ${w}, ${h}, ${name});`,
       arcRing: true,
       arcAngle: "tft_espi",
       arcApprox: false,
@@ -276,7 +277,14 @@ function apiFor(lib) {
     return {
       ...gfxBase(t, c, label),
       wideLine: (x1, y1, x2, y2, w, col) =>
-        `${t}.drawWideLine(${x1}, ${y1}, ${x2}, ${y2}, ${Math.max(0.5, w / 2)}, ${c(col)});`,
+        `${t}drawWideLine(${x1}, ${y1}, ${x2}, ${y2}, ${Math.max(0.5, w / 2)}, ${c(col)});`,
+      arc: (cx, cy, r0, r1, a0, a1, col) =>
+        `${t}drawArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)});`,
+      fillArc: (cx, cy, r0, r1, a0, a1, col) =>
+        `${t}fillArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)});`,
+      bitmapRgb: (x, y, name, w, h) => `${t}pushImage(${x}, ${y}, ${w}, ${h}, ${name});`,
+      arcRing: true,
+      arcAngle: "lovyan",
       arcApprox: false,
     };
   }
@@ -285,10 +293,10 @@ function apiFor(lib) {
     return {
       ...gfxBase(t, c, label),
       arc: (cx, cy, r0, r1, a0, a1, col) =>
-        `${t}.drawArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)});`,
+        `${t}drawArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)});`,
       fillArc: (cx, cy, r0, r1, a0, a1, col) =>
-        `${t}.fillArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)});`,
-      bitmapRgb: (x, y, name, w, h) => `${t}.draw16bitRGBBitmap(${x}, ${y}, ${name}, ${w}, ${h});`,
+        `${t}fillArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)});`,
+      bitmapRgb: (x, y, name, w, h) => `${t}draw16bitRGBBitmap(${x}, ${y}, ${name}, ${w}, ${h});`,
       arcRing: true,
       arcAngle: "arduino_gfx",
       arcApprox: false,
@@ -299,22 +307,22 @@ function apiFor(lib) {
     const u8r = ["U8G2_R0", "U8G2_R1", "U8G2_R2", "U8G2_R3"];
     return {
       libLabel: label,
-      setRotation: (r) => `${t}.setDisplayRotation(${u8r[r] || "U8G2_R0"});`,
-      fillScreen: () => `${t}.clearBuffer();`,
-      line: (x1, y1, x2, y2) => `${t}.drawLine(${x1}, ${y1}, ${x2}, ${y2});`,
+      setRotation: (r) => `${t}setDisplayRotation(${u8r[r] || "U8G2_R0"});`,
+      fillScreen: () => `${t}clearBuffer();`,
+      line: (x1, y1, x2, y2) => `${t}drawLine(${x1}, ${y1}, ${x2}, ${y2});`,
       rect: (x, y, w, h, _c, fill) =>
-        fill ? `${t}.drawBox(${x}, ${y}, ${w}, ${h});` : `${t}.drawFrame(${x}, ${y}, ${w}, ${h});`,
+        fill ? `${t}drawBox(${x}, ${y}, ${w}, ${h});` : `${t}drawFrame(${x}, ${y}, ${w}, ${h});`,
       circle: (cx, cy, r, _c, fill) =>
-        fill ? `${t}.drawDisc(${cx}, ${cy}, ${r});` : `${t}.drawCircle(${cx}, ${cy}, ${r});`,
-      text: (x, y, text) => [`${t}.setFont(u8g2_font_6x12_tr);`, `${t}.drawStr(${x}, ${y + 10}, "${esc(text)}");`],
+        fill ? `${t}drawDisc(${cx}, ${cy}, ${r});` : `${t}drawCircle(${cx}, ${cy}, ${r});`,
+      text: (x, y, text) => [`${t}setFont(u8g2_font_6x12_tr);`, `${t}drawStr(${x}, ${y + 10}, "${esc(text)}");`],
       // U8g2: cnt = ширина в байтах
-      bitmap: (x, y, name, w, h) => `${t}.drawBitmap(${x}, ${y}, ${Math.ceil(w / 8)}, ${h}, ${name});`,
+      bitmap: (x, y, name, w, h) => `${t}drawBitmap(${x}, ${y}, ${Math.ceil(w / 8)}, ${h}, ${name});`,
       // U8g2: углы 0…255 на полный круг; толщина — несколько радиусов
-      arc: (cx, cy, r0, _r1, a0, a1) => `${t}.drawArc(${cx}, ${cy}, ${r0}, ${a0}, ${a1});`,
+      arc: (cx, cy, r0, _r1, a0, a1) => `${t}drawArc(${cx}, ${cy}, ${r0}, ${a0}, ${a1});`,
       arcSingle: true,
       arcAngle: "u8g2",
       arcApprox: false,
-      footer: () => `${t}.sendBuffer();`,
+      footer: () => `${t}sendBuffer();`,
     };
   }
 
@@ -322,11 +330,11 @@ function apiFor(lib) {
     return {
       libLabel: label,
       setRotation: (r) => `// U8x8: поворот задайте в конструкторе (rotation=${r})`,
-      fillScreen: () => `${t}.clearDisplay();`,
+      fillScreen: () => `${t}clearDisplay();`,
       line: () => `// u8x8: нет линий — используйте U8g2`,
       rect: () => `// u8x8: нет прямоугольников — U8g2`,
       circle: () => `// u8x8: нет окружностей — U8g2`,
-      text: (x, y, text) => `${t}.drawString(${Math.floor(x / 8)}, ${Math.floor(y / 8)}, "${esc(text)}");`,
+      text: (x, y, text) => `${t}drawString(${Math.floor(x / 8)}, ${Math.floor(y / 8)}, "${esc(text)}");`,
       arcApprox: true,
     };
   }
@@ -338,16 +346,16 @@ function apiFor(lib) {
         r === 0
           ? `// SSD1306Wire: rotation 0`
           : `// SSD1306Wire: rotation ${r} — flipScreenVertically() / геометрия в конструкторе`,
-      fillScreen: () => `${t}.clear();`,
-      line: (x1, y1, x2, y2) => `${t}.drawLine(${x1}, ${y1}, ${x2}, ${y2});`,
+      fillScreen: () => `${t}clear();`,
+      line: (x1, y1, x2, y2) => `${t}drawLine(${x1}, ${y1}, ${x2}, ${y2});`,
       rect: (x, y, w, h, _c, fill) =>
-        fill ? `${t}.fillRect(${x}, ${y}, ${w}, ${h});` : `${t}.drawRect(${x}, ${y}, ${w}, ${h});`,
+        fill ? `${t}fillRect(${x}, ${y}, ${w}, ${h});` : `${t}drawRect(${x}, ${y}, ${w}, ${h});`,
       circle: (cx, cy, r, _c, fill) =>
-        fill ? `${t}.fillCircle(${cx}, ${cy}, ${r});` : `${t}.drawCircle(${cx}, ${cy}, ${r});`,
-      text: (x, y, text) => `${t}.drawString(${x}, ${y}, "${esc(text)}");`,
-      bitmap: (x, y, name, w, h) => `${t}.drawFastImage(${x}, ${y}, ${w}, ${h}, ${name}); // 1-bit XBM-style — проверьте API`,
+        fill ? `${t}fillCircle(${cx}, ${cy}, ${r});` : `${t}drawCircle(${cx}, ${cy}, ${r});`,
+      text: (x, y, text) => `${t}drawString(${x}, ${y}, "${esc(text)}");`,
+      bitmap: (x, y, name, w, h) => `${t}drawFastImage(${x}, ${y}, ${w}, ${h}, ${name}); // 1-bit XBM-style — проверьте API`,
       arcApprox: true,
-      footer: () => `${t}.display();`,
+      footer: () => `${t}display();`,
     };
   }
 
@@ -355,14 +363,14 @@ function apiFor(lib) {
     return {
       libLabel: label,
       setRotation: (r) => `// Tiny4kOLED: rotation ${r}`,
-      fillScreen: () => `${t}.clear();`,
-      line: (x1, y1, x2, y2) => `${t}.drawLine(${x1}, ${y1}, ${x2}, ${y2});`,
+      fillScreen: () => `${t}clear();`,
+      line: (x1, y1, x2, y2) => `${t}drawLine(${x1}, ${y1}, ${x2}, ${y2});`,
       rect: (x, y, w, h, _c, fill) =>
-        fill ? `${t}.fillRect(${x}, ${y}, ${w}, ${h});` : `${t}.drawRect(${x}, ${y}, ${w}, ${h});`,
-      circle: (cx, cy, r) => `${t}.drawCircle(${cx}, ${cy}, ${r});`,
-      text: (x, y, text) => [`${t}.setCursor(${x}, ${y});`, `${t}.print("${esc(text)}");`],
+        fill ? `${t}fillRect(${x}, ${y}, ${w}, ${h});` : `${t}drawRect(${x}, ${y}, ${w}, ${h});`,
+      circle: (cx, cy, r) => `${t}drawCircle(${cx}, ${cy}, ${r});`,
+      text: (x, y, text) => [`${t}setCursor(${x}, ${y});`, `${t}print("${esc(text)}");`],
       arcApprox: true,
-      footer: () => `${t}.display();`,
+      footer: () => `${t}display();`,
     };
   }
 
@@ -372,25 +380,25 @@ function apiFor(lib) {
       setRotation: (r) => `// UTFT: ориентацию задайте в InitLCD (rotation=${r})`,
       fillScreen: (bg) => {
         const { r, g, b } = hexToRgb(bg);
-        return [`${t}.setColor(${r}, ${g}, ${b});`, `${t}.fillScr(${r}, ${g}, ${b});`];
+        return [`${t}setColor(${r}, ${g}, ${b});`, `${t}fillScr(${r}, ${g}, ${b});`];
       },
       line: (x1, y1, x2, y2, col) => [
-        `${t}.setColor(${formatUtftColor(col)});`,
-        `${t}.drawLine(${x1}, ${y1}, ${x2}, ${y2});`,
+        `${t}setColor(${formatUtftColor(col)});`,
+        `${t}drawLine(${x1}, ${y1}, ${x2}, ${y2});`,
       ],
       rect: (x, y, w, h, col, fill) => [
-        `${t}.setColor(${formatUtftColor(col)});`,
+        `${t}setColor(${formatUtftColor(col)});`,
         fill
-          ? `${t}.fillRect(${x}, ${y}, ${x + w - 1}, ${y + h - 1});`
-          : `${t}.drawRect(${x}, ${y}, ${x + w - 1}, ${y + h - 1});`,
+          ? `${t}fillRect(${x}, ${y}, ${x + w - 1}, ${y + h - 1});`
+          : `${t}drawRect(${x}, ${y}, ${x + w - 1}, ${y + h - 1});`,
       ],
       circle: (cx, cy, r, col, fill) => [
-        `${t}.setColor(${formatUtftColor(col)});`,
-        fill ? `${t}.fillCircle(${cx}, ${cy}, ${r});` : `${t}.drawCircle(${cx}, ${cy}, ${r});`,
+        `${t}setColor(${formatUtftColor(col)});`,
+        fill ? `${t}fillCircle(${cx}, ${cy}, ${r});` : `${t}drawCircle(${cx}, ${cy}, ${r});`,
       ],
       text: (x, y, text, col) => [
-        `${t}.setColor(${formatUtftColor(col)});`,
-        `${t}.print("${esc(text)}", ${x}, ${y});`,
+        `${t}setColor(${formatUtftColor(col)});`,
+        `${t}print("${esc(text)}", ${x}, ${y});`,
       ],
       arcApprox: true,
     };
@@ -404,22 +412,22 @@ function apiFor(lib) {
     return {
       libLabel: label,
       setRotation: (r) => `// Ucglib: поворот ${r} — зависит от драйвера/конструктора`,
-      fillScreen: (bg) => [`${t}.setColor(${rgb(bg)});`, `${t}.clearScreen();`],
-      line: (x1, y1, x2, y2, col) => [`${t}.setColor(${rgb(col)});`, `${t}.drawLine(${x1}, ${y1}, ${x2}, ${y2});`],
+      fillScreen: (bg) => [`${t}setColor(${rgb(bg)});`, `${t}clearScreen();`],
+      line: (x1, y1, x2, y2, col) => [`${t}setColor(${rgb(col)});`, `${t}drawLine(${x1}, ${y1}, ${x2}, ${y2});`],
       rect: (x, y, w, h, col, fill) => [
-        `${t}.setColor(${rgb(col)});`,
-        fill ? `${t}.drawBox(${x}, ${y}, ${w}, ${h});` : `${t}.drawFrame(${x}, ${y}, ${w}, ${h});`,
+        `${t}setColor(${rgb(col)});`,
+        fill ? `${t}drawBox(${x}, ${y}, ${w}, ${h});` : `${t}drawFrame(${x}, ${y}, ${w}, ${h});`,
       ],
       circle: (cx, cy, r, col, fill) => [
-        `${t}.setColor(${rgb(col)});`,
+        `${t}setColor(${rgb(col)});`,
         fill
-          ? `${t}.drawDisc(${cx}, ${cy}, ${r}, UCG_DRAW_ALL);`
-          : `${t}.drawCircle(${cx}, ${cy}, ${r}, UCG_DRAW_ALL);`,
+          ? `${t}drawDisc(${cx}, ${cy}, ${r}, UCG_DRAW_ALL);`
+          : `${t}drawCircle(${cx}, ${cy}, ${r}, UCG_DRAW_ALL);`,
       ],
       text: (x, y, text, col) => [
-        `${t}.setColor(${rgb(col)});`,
-        `${t}.setPrintPos(${x}, ${y});`,
-        `${t}.print("${esc(text)}");`,
+        `${t}setColor(${rgb(col)});`,
+        `${t}setPrintPos(${x}, ${y});`,
+        `${t}print("${esc(text)}");`,
       ],
       // Ucglib: drawArc нет — только круг/диск/линии
       arcApprox: true,
@@ -573,20 +581,23 @@ function indent(item) {
   return "  " + item;
 }
 
-export function codegenObject(obj, lib) {
+export function codegenObject(obj, lib, project = null) {
   const lines = [];
-  lines.push(`// ${obj.name || obj.type}`);
-  emitObject(obj, lib, lines, apiFor(lib), null);
+  const prefix = libCallPrefix(lib, project);
+  lines.push(`// ${obj.name || obj.type}  ·  ${prefix}`);
+  emitObject(obj, lib, lines, apiFor(lib, project), null);
   return lines.join("\n");
 }
 
 export function codegenScreen(project, lib) {
   const lines = [];
   const decls = [];
-  const api = apiFor(lib);
+  const api = apiFor(lib, project);
+  const prefix = libCallPrefix(lib, project);
   const rot = orientationToRotation(project.orientationId);
   lines.push(`// GUI Draw Master — ${lib.label}`);
   lines.push(`// ${project.width}x${project.height} px, origin (0,0), ${orientationLabel(project.orientationId)}`);
+  lines.push(`// вызовы: ${prefix}…  (имя/«.»|«->» — в настройках «Объект в коде»)`);
 
   const emitOne = (obj) => {
     lines.push(``);
