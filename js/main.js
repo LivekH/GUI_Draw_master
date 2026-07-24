@@ -58,7 +58,16 @@ const els = {
   cursorPos: $("cursor-pos"),
 };
 
-const ctx = els.canvas.getContext("2d");
+const ctx = els.canvas ? els.canvas.getContext("2d") : null;
+if (!ctx) {
+  const msg =
+    "Не найден холст (#screen). Откройте проект через GUI master.bat (http://127.0.0.1:8765/), не как file://";
+  console.error(msg);
+  document.body.insertAdjacentHTML(
+    "afterbegin",
+    `<pre style="margin:1rem;padding:1rem;background:#400;color:#fff;white-space:pre-wrap">${msg}</pre>`
+  );
+}
 
 function currentLib() {
   return LIBRARIES.find((l) => l.id === state.project.libraryId) || LIBRARIES[0];
@@ -277,7 +286,9 @@ function syncCodeObjUi(fromLib = false) {
     state.project.codeAccess = lib.access === "->" ? "->" : ".";
   }
   if (els.codeObj) els.codeObj.value = state.project.codeObj || lib.obj || "tft";
-  if (els.codeAccess) els.codeAccess.value = state.project.codeAccess === "->" ? "->" : ".";
+  if (els.codeAccess) {
+    els.codeAccess.value = state.project.codeAccess === "->" ? "arrow" : "dot";
+  }
 }
 
 function refreshCode() {
@@ -1217,7 +1228,8 @@ function moveElement(el, dx, dy) {
   }
 }
 
-els.canvas.addEventListener("mousedown", (e) => {
+if (els.canvas) {
+  els.canvas.addEventListener("mousedown", (e) => {
   if (e.button !== 0 || e.altKey) return;
   const p = canvasPoint(e);
   const hits = hitsAt(p.x, p.y);
@@ -1243,8 +1255,9 @@ els.canvas.addEventListener("mousedown", (e) => {
   redraw();
 });
 
-els.canvas.addEventListener("mousemove", updateCursorPos);
-els.canvas.addEventListener("mouseleave", clearCursorPos);
+  els.canvas.addEventListener("mousemove", updateCursorPos);
+  els.canvas.addEventListener("mouseleave", clearCursorPos);
+}
 els.stage?.addEventListener("mousemove", updateCursorPos);
 els.stage?.addEventListener("mouseleave", clearCursorPos);
 
@@ -1355,7 +1368,7 @@ els.codeObj?.addEventListener("input", () => {
 });
 
 els.codeAccess?.addEventListener("change", () => {
-  state.project.codeAccess = els.codeAccess.value === "->" ? "->" : ".";
+  state.project.codeAccess = els.codeAccess.value === "arrow" ? "->" : ".";
   refreshCode();
 });
 
@@ -1613,44 +1626,53 @@ els.fileOpen.addEventListener("change", async () => {
 });
 
 // boot
-fillDisplays();
-fillOrients();
-els.display.value = state.project.displayId;
-els.orient.value = state.project.orientationId;
-fillLibraries();
-renderToolbox();
+try {
+  if (!ctx) throw new Error("canvas context unavailable");
+  fillDisplays();
+  fillOrients();
+  els.display.value = state.project.displayId;
+  els.orient.value = state.project.orientationId;
+  fillLibraries();
+  renderToolbox();
 
-attachHelp(
-  els.display.closest(".field") || els.display,
-  "Дисплей",
-  "Разрешение и тип экрана (OLED/TFT). Меняет размер холста. Сначала выберите дисплей, потом ориентацию и библиотеку."
-);
-attachHelp(
-  els.orient.closest(".field") || els.orient,
-  "Ориентация",
-  "Поворот экрана (setRotation 0…3). Меняет ширину↔высоту холста. Рисунок сам не сдвигается — выберите элемент и нажмите «центр» у Центр X / Центр Y."
-);
-attachHelp(
-  els.library.closest(".field") || els.library,
-  "Библиотека",
-  "Под какую draw-библиотеку генерировать код (TFT_eSPI, Adafruit GFX, U8g2…). Список зависит от типа дисплея. Вместе с библиотекой подставляется типичное имя объекта (tft. / gfx-> / lcd.)."
-);
-attachHelp(
-  els.codeObj?.closest(".field") || els.codeObj,
-  "Объект в коде",
-  "Имя переменной дисплея в вашем sketch. Arduino_GFX обычно gfx-> (указатель); если у вас tft-> — напишите tft и выберите «->». TFT_eSPI / Adafruit — чаще tft."
-);
-attachHelp(
-  els.codeAccess?.closest(".field") || els.codeAccess,
-  "Доступ . или ->",
-  "Точка — объект на стеке (TFT_eSPI tft; → tft.). Стрелка — указатель (Arduino_GFX *gfx → gfx->)."
-);
-attachHelp($("btn-new"), "Новый", "Очистить проект и начать с пустого экрана.");
-attachHelp($("btn-open"), "Открыть", "Загрузить ранее сохранённый JSON проекта.");
-attachHelp($("btn-save"), "Сохранить", "Скачать проект в JSON (удобно не потерять работу после обновления страницы).");
-attachHelp($("btn-code"), "Код экрана", "Показать / скрыть панель с полным drawGui() для выбранной библиотеки.");
-attachHelp($("btn-copy-all"), "Копировать код", "Скопировать код всего экрана в буфер обмена.");
-attachHelp($("btn-grid"), "Сетка", "Включить / выключить пиксельную сетку на холсте.");
+  attachHelp(
+    els.display.closest(".field") || els.display,
+    "Дисплей",
+    "Разрешение и тип экрана (OLED/TFT). Меняет размер холста. Сначала выберите дисплей, потом ориентацию и библиотеку."
+  );
+  attachHelp(
+    els.orient.closest(".field") || els.orient,
+    "Ориентация",
+    "Поворот экрана (setRotation 0…3). Меняет ширину↔высоту холста. Рисунок сам не сдвигается — выберите элемент и нажмите «центр» у Центр X / Центр Y."
+  );
+  attachHelp(
+    els.library.closest(".field") || els.library,
+    "Библиотека",
+    "Под какую draw-библиотеку генерировать код (TFT_eSPI, Adafruit GFX, U8g2…). Список зависит от типа дисплея. Вместе с библиотекой подставляется типичное имя объекта (tft. / gfx-> / lcd.)."
+  );
+  attachHelp(
+    els.codeObj?.closest(".field") || els.codeObj,
+    "Объект в коде",
+    "Имя переменной дисплея в вашем sketch. Arduino_GFX обычно gfx-> (указатель); если у вас tft-> — напишите tft и выберите «->». TFT_eSPI / Adafruit — чаще tft."
+  );
+  attachHelp(
+    els.codeAccess?.closest(".field") || els.codeAccess,
+    "Доступ . или ->",
+    "Точка — объект на стеке (TFT_eSPI tft; → tft.). Стрелка — указатель (Arduino_GFX *gfx → gfx->)."
+  );
+  attachHelp($("btn-new"), "Новый", "Очистить проект и начать с пустого экрана.");
+  attachHelp($("btn-open"), "Открыть", "Загрузить ранее сохранённый JSON проекта.");
+  attachHelp($("btn-save"), "Сохранить", "Скачать проект в JSON (удобно не потерять работу после обновления страницы).");
+  attachHelp($("btn-code"), "Код экрана", "Показать / скрыть панель с полным drawGui() для выбранной библиотеки.");
+  attachHelp($("btn-copy-all"), "Копировать код", "Скопировать код всего экрана в буфер обмена.");
+  attachHelp($("btn-grid"), "Сетка", "Включить / выключить пиксельную сетку на холсте.");
 
-syncCodeObjUi(false);
-redraw();
+  syncCodeObjUi(false);
+  redraw();
+} catch (err) {
+  console.error(err);
+  document.body.insertAdjacentHTML(
+    "afterbegin",
+    `<pre style="margin:1rem;padding:1rem;background:#400;color:#fff;white-space:pre-wrap">Ошибка запуска:\n${err && err.stack ? err.stack : err}</pre>`
+  );
+}
