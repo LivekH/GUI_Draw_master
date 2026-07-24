@@ -1,4 +1,4 @@
-import { resolveSize } from "./catalog.js";
+import { resolveSize } from "./catalog.js?v=20260724e";
 
 export const TOOLS = [
   {

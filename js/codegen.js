@@ -1,9 +1,9 @@
 /**
  * Code generators — map canvas objects → library draw calls
  */
-import { format565, formatUtftColor, isOn, hexToRgb } from "./color.js";
-import { bitsToCArray, rgb565ToCArray, safeArrayName } from "./bitmap.js";
-import { libCallPrefix } from "./catalog.js";
+import { format565, formatUtftColor, isOn, hexToRgb } from "./color.js?v=20260724e";
+import { bitsToCArray, rgb565ToCArray, safeArrayName } from "./bitmap.js?v=20260724e";
+import { libCallPrefix } from "./catalog.js?v=20260724e";
 
 export function polar(cx, cy, r, deg) {
   const a = ((deg - 90) * Math.PI) / 180;

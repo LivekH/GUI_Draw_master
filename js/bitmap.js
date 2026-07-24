@@ -2,7 +2,7 @@
  * PNG/BMP → 1-bit (GFX drawBitmap) or RGB565 (pushImage / drawRGBBitmap)
  */
 
-import { rgbTo565 } from "./color.js";
+import { rgbTo565 } from "./color.js?v=20260724e";
 
 /** @param {File|Blob} file */
 export function readFileAsDataURL(file) {

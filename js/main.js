@@ -1,8 +1,8 @@
-import { DISPLAYS, ORIENTATIONS, LIBRARIES, filterLibraries, resolveSize, getDisplay, syncCodeObjFromLib } from "./catalog.js";
-import { TOOLS, createProject, createElement, elementBounds, resetIdCounter, nextId, nextGroupId, resetGroupCounter, getGroup, groupMembers } from "./models.js";
-import { renderProject } from "./renderer.js";
-import { codegenObject, codegenScreen } from "./codegen.js";
-import { format565 } from "./color.js";
+import { DISPLAYS, ORIENTATIONS, LIBRARIES, filterLibraries, resolveSize, getDisplay, syncCodeObjFromLib } from "./catalog.js?v=20260724e";
+import { TOOLS, createProject, createElement, elementBounds, resetIdCounter, nextId, nextGroupId, resetGroupCounter, getGroup, groupMembers } from "./models.js?v=20260724e";
+import { renderProject } from "./renderer.js?v=20260724e";
+import { codegenObject, codegenScreen } from "./codegen.js?v=20260724e";
+import { format565 } from "./color.js?v=20260724e";
 import {
   readFileAsDataURL,
   loadImage,
@@ -10,7 +10,7 @@ import {
   rasterizeBitmap,
   bitsToImageData,
   rgb565ToImageData,
-} from "./bitmap.js";
+} from "./bitmap.js?v=20260724e";
 
 const state = {
   project: createProject(),
