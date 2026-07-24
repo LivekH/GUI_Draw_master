@@ -1,4 +1,4 @@
-import { tickPoints, scaleLabels, polar } from "./codegen.js?v=20260724j";
+import { tickPoints, scaleLabels, polar } from "./codegen.js?v=20260724f";
 
 function strokePath(ctx, points, close = false) {
   if (!points.length) return;
