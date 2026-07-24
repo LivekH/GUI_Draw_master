@@ -1,8 +1,8 @@
-﻿import { DISPLAYS, ORIENTATIONS, LIBRARIES, filterLibraries, resolveSize, getDisplay, syncCodeObjFromLib } from "./catalog.js?v=20260724g";
-import { TOOLS, createProject, createElement, elementBounds, resetIdCounter, nextId, nextGroupId, resetGroupCounter, getGroup, groupMembers } from "./models.js?v=20260724g";
-import { renderProject } from "./renderer.js?v=20260724g";
-import { codegenObject, codegenScreen } from "./codegen.js?v=20260724g";
-import { format565 } from "./color.js?v=20260724g";
+﻿import { DISPLAYS, ORIENTATIONS, LIBRARIES, filterLibraries, resolveSize, getDisplay, syncCodeObjFromLib } from "./catalog.js?v=20260724i";
+import { TOOLS, createProject, createElement, elementBounds, resetIdCounter, nextId, nextGroupId, resetGroupCounter, getGroup, groupMembers } from "./models.js?v=20260724i";
+import { renderProject } from "./renderer.js?v=20260724i";
+import { codegenObject, codegenScreen } from "./codegen.js?v=20260724i";
+import { format565 } from "./color.js?v=20260724i";
 import {
   readFileAsDataURL,
   loadImage,
@@ -10,7 +10,7 @@ import {
   rasterizeBitmap,
   bitsToImageData,
   rgb565ToImageData,
-} from "./bitmap.js?v=20260724g";
+} from "./bitmap.js?v=20260724i";
 
 const state = {
   project: createProject(),
@@ -545,7 +545,7 @@ const PROP_HELP = {
   "Радиус внут.": "Внутренний край major-делений. Чем меньше разница с внешним — тем короче штрихи.",
   "Радиус подп.": "Радиус размещения числовых подписей (обычно чуть меньше внутренней зоны).",
   "Начало °":
-    "Угол начала дуги в редакторе: 0° — вверх, 90° — вправо, 180° — вниз, 270° — влево; рост по часовой. Полное кольцо: задайте разницу 360° (например 0…360) — в коде будет drawArc(…, 0, 360) с толщиной. В коде для каждой библиотеки углы пересчитываются (TFT_eSPI: 0=6ч; Lovyan/Arduino_GFX: 0=3ч CW; U8g2: 0…255).",
+    "Угол начала дуги в редакторе: 0° — вверх, 90° — вправо, 180° — вниз, 270° — влево; рост по часовой. Полное кольцо: 0…360. Жирная дуга в Arduino_GFX/Lovyan → fillArc(rOuter,rInner,…); TFT_eSPI → drawArc (там заливка встроена). Углы: TFT_eSPI 0=6ч; Lovyan/Arduino_GFX 0=3ч CW; U8g2 0…255.",
   "Конец °":
     "Угол конца дуги. Если Конец < Начало — короткая дуга против часовой (в коде для Arduino_GFX/Lovyan/TFT концы меняются, чтобы не было длинного обхода). Полное кольцо: 0…360.",
   Делений: "Число крупных (major) рисок, включая крайние. Подписей столько же.",
@@ -560,7 +560,7 @@ const PROP_HELP = {
   "Режим шрифта": "setTextSize(1/2/3) в коде библиотеки (GFX/TFT_eSPI). Влияет на размер цифр на реальном дисплее.",
   "Высота шрифта": "Высота цифр шкалы в пикселях на холсте редактора (превью). В код уходит «Режим шрифта» (setTextSize).",
   "Показать дугу": "Рисовать основную дугу шкалы (без неё остаются только деления/цифры).",
-  "Толщина дуги": "Толщина дуги шкалы в пикселях. В коде: drawArc или несколько концентрических линий.",
+  "Толщина дуги": "Ширина залитого кольца (rOuter−rInner). Arduino_GFX/Lovyan: fillArc; TFT_eSPI: drawArc; U8g2: несколько drawArc.",
   "Цвет дуги": "Цвет дуги шкалы (в коде — RGB565 или mono).",
   "Цвет делений": "Цвет крупных рисок.",
   "Цвет промежут.": "Цвет мелких рисок.",

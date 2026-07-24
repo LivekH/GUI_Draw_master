@@ -1,9 +1,9 @@
 ﻿/**
  * Code generators — map canvas objects → library draw calls
  */
-import { format565, formatUtftColor, isOn, hexToRgb } from "./color.js?v=20260724g";
-import { bitsToCArray, rgb565ToCArray, safeArrayName } from "./bitmap.js?v=20260724g";
-import { libCallPrefix } from "./catalog.js?v=20260724g";
+import { format565, formatUtftColor, isOn, hexToRgb } from "./color.js?v=20260724i";
+import { bitsToCArray, rgb565ToCArray, safeArrayName } from "./bitmap.js?v=20260724i";
+import { libCallPrefix } from "./catalog.js?v=20260724i";
 
 export function polar(cx, cy, r, deg) {
   const a = ((deg - 90) * Math.PI) / 180;
@@ -102,6 +102,49 @@ function push(lines, item) {
   else if (item) lines.push(item);
 }
 
+/** Добавить расшифровку параметров в конец строки кода */
+function annotate(code, note) {
+  if (!code) return code;
+  if (Array.isArray(code)) {
+    return code.map((ln, i) => (i === code.length - 1 ? annotate(ln, note) : ln));
+  }
+  const s = String(code);
+  if (!s.trim() || s.trimStart().startsWith("//")) return s;
+  if (/\s\/\/\s/.test(s)) return s;
+  return `${s.replace(/\s+$/, "")} // ${note}`;
+}
+
+function arcParamNote(r0, r1, a0, a1, extra = "") {
+  const th = Math.max(0, Math.round(r0) - Math.round(r1));
+  const base = `центр x,y | r внешн,r внутр (толщ.≈${th}) | угол нач,кон | цвет`;
+  return extra ? `${base} | ${extra}` : base;
+}
+
+/** Краткая легенда параметров дуги для шапки сгенерированного файла */
+function arcLegendLines(lib) {
+  const f = lib.family;
+  if (f === "arduino_gfx" || f === "lovyangfx") {
+    return [
+      `// дуга: fillArc(x,y, rOuter,rInner, start°,end°, color) — заливка кольца; drawArc — только контур`,
+      `// углы библиотеки: 0°=3ч (вправо), рост по часовой; толщина на экране ≈ rOuter−rInner (на железе/Proteus может чуть отличаться)`,
+    ];
+  }
+  if (f === "tft_espi") {
+    return [
+      `// дуга: drawArc(x,y, rOuter,rInner, start°,end°, fg,bg, smooth) — заливка кольца встроена`,
+      `// углы TFT_eSPI: 0°=6ч (вниз), рост по часовой; толщина ≈ rOuter−rInner+1`,
+    ];
+  }
+  if (f === "u8g2") {
+    return [
+      `// дуга: drawArc(x,y, r, start,end) — углы 0…255; толщина = несколько вызовов с разным r`,
+    ];
+  }
+  return [
+    `// координаты: origin (0,0) — левый верх; у каждой строки — расшифровка аргументов`,
+  ];
+}
+
 /** Толстая линия: drawWideLine или несколько параллельных drawLine */
 function emitThickLine(api, x1, y1, x2, y2, thickness, col, lines) {
   const th = Math.max(1, Math.round(thickness || 1));
@@ -171,7 +214,7 @@ function toLibAngles(api, a0, a1) {
   const mode = api.arcAngle || "raw";
   const span = Number(a1) - Number(a0);
 
-  // Полное кольцо → всегда 0…360 (U8g2: 0…255), один drawArc(r0,r1,…)
+  // Полное кольцо → всегда 0…360 (U8g2: 0…255)
   if (isFullSweep(a0, a1)) {
     if (mode === "u8g2") return { a0: 0, a1: 255 };
     return { a0: 0, a1: 360 };
@@ -205,30 +248,41 @@ function toLibAngles(api, a0, a1) {
   return { a0: s, a1: e };
 }
 
-/** Нативная дуга библиотеки или fallback линиями */
+/**
+ * Толстая дуга редактора = заливка кольца между rOuter и rInner.
+ *
+ * Arduino_GFX / LovyanGFX:
+ *   drawArc  — только контур (две тонкие дуги rOuter и rInner + торцы)
+ *   fillArc  — заливка сектора кольца (нужно для «жирной» дуги)
+ * TFT_eSPI:
+ *   drawArc(r, ir, …) уже заливает кольцо толщиной r−ir+1 (отдельного fillArc нет)
+ * U8g2: только drawArc(r) — толщину набираем несколькими радиусами
+ */
 function emitArc(api, cx, cy, r, a0, a1, col, lines, thickness = 1, segments = 24) {
   const th = Math.max(1, Math.round(thickness || 1));
   const rOuter = Math.max(1, Math.round(r));
   const rInner = Math.max(0, rOuter - th);
 
-  if (api.arc && !api.arcApprox) {
+  if ((api.arc || api.fillArc) && !api.arcApprox) {
     const { a0: s, a1: e } = toLibAngles(api, a0, a1);
     if (api.arcRing) {
-      // один вызов с внешним/внутренним радиусом (TFT_eSPI, Lovyan, Arduino_GFX)
-      push(lines, api.arc(cx, cy, rOuter, rInner, s, e, col));
-    } else if (api.arcSingle) {
-      // только радиус (U8g2) — для толщины несколько дуг
+      // заливка кольца: fillArc если есть, иначе drawArc (TFT_eSPI)
+      const emit = api.fillArc || api.arc;
+      push(lines, emit(cx, cy, rOuter, rInner, s, e, col));
+    } else if (api.arcSingle && api.arc) {
       for (let ring = 0; ring < th; ring++) {
         push(lines, api.arc(cx, cy, Math.max(1, rOuter - ring), 0, s, e, col));
       }
-    } else {
+    } else if (api.fillArc) {
+      push(lines, api.fillArc(cx, cy, rOuter, rInner, s, e, col));
+    } else if (api.arc) {
       push(lines, api.arc(cx, cy, rOuter, rInner, s, e, col));
     }
     return;
   }
 
   if (th > 1) {
-    lines.push(`// дуга: у «${api.libLabel || "этой библиотеки"}» нет drawArc — эмуляция линиями`);
+    lines.push(`// дуга: у «${api.libLabel || "этой библиотеки"}» нет fillArc/drawArc — эмуляция линиями`);
   }
   emitArcApprox(api, cx, cy, rOuter, a0, a1, col, lines, segments, th);
 }
@@ -250,25 +304,34 @@ function emitSector(api, cx, cy, r, a0, a1, col, lines) {
 function gfxBase(t, c, libLabel) {
   return {
     libLabel,
-    setRotation: (r) => `${t}setRotation(${r});`,
-    fillScreen: (bg) => `${t}fillScreen(${c(bg)});`,
-    line: (x1, y1, x2, y2, col) => `${t}drawLine(${x1}, ${y1}, ${x2}, ${y2}, ${c(col)});`,
+    setRotation: (r) => annotate(`${t}setRotation(${r});`, `поворот 0=0° 1=90° 2=180° 3=270°`),
+    fillScreen: (bg) => annotate(`${t}fillScreen(${c(bg)});`, `цвет фона`),
+    line: (x1, y1, x2, y2, col) =>
+      annotate(`${t}drawLine(${x1}, ${y1}, ${x2}, ${y2}, ${c(col)});`, `x1,y1 → x2,y2 | цвет`),
     rect: (x, y, w, h, col, fill) =>
-      fill
-        ? `${t}fillRect(${x}, ${y}, ${w}, ${h}, ${c(col)});`
-        : `${t}drawRect(${x}, ${y}, ${w}, ${h}, ${c(col)});`,
+      annotate(
+        fill
+          ? `${t}fillRect(${x}, ${y}, ${w}, ${h}, ${c(col)});`
+          : `${t}drawRect(${x}, ${y}, ${w}, ${h}, ${c(col)});`,
+        `x,y | ширина,высота | цвет${fill ? " (заливка)" : " (контур)"}`
+      ),
     circle: (cx, cy, r, col, fill) =>
-      fill
-        ? `${t}fillCircle(${cx}, ${cy}, ${r}, ${c(col)});`
-        : `${t}drawCircle(${cx}, ${cy}, ${r}, ${c(col)});`,
+      annotate(
+        fill
+          ? `${t}fillCircle(${cx}, ${cy}, ${r}, ${c(col)});`
+          : `${t}drawCircle(${cx}, ${cy}, ${r}, ${c(col)});`,
+        `центр x,y | радиус | цвет${fill ? " (диск)" : " (контур)"}`
+      ),
     text: (x, y, text, col, size) => [
-      `${t}setTextColor(${c(col)});`,
-      `${t}setTextSize(${size});`,
-      `${t}setCursor(${x}, ${y});`,
-      `${t}print("${esc(text)}");`,
+      annotate(`${t}setTextColor(${c(col)});`, `цвет текста`),
+      annotate(`${t}setTextSize(${size});`, `масштаб шрифта`),
+      annotate(`${t}setCursor(${x}, ${y});`, `позиция x,y (левый верх текста)`),
+      annotate(`${t}print("${esc(text)}");`, `строка`),
     ],
-    bitmap: (x, y, name, w, h, col) => `${t}drawBitmap(${x}, ${y}, ${name}, ${w}, ${h}, ${c(col)});`,
-    bitmapRgb: (x, y, name, w, h) => `${t}drawRGBBitmap(${x}, ${y}, ${name}, ${w}, ${h});`,
+    bitmap: (x, y, name, w, h, col) =>
+      annotate(`${t}drawBitmap(${x}, ${y}, ${name}, ${w}, ${h}, ${c(col)});`, `x,y | массив | w,h | цвет`),
+    bitmapRgb: (x, y, name, w, h) =>
+      annotate(`${t}drawRGBBitmap(${x}, ${y}, ${name}, ${w}, ${h});`, `x,y | массив RGB565 | w,h`),
   };
 }
 
@@ -282,13 +345,23 @@ function apiFor(lib, project = null) {
     return {
       ...gfxBase(t, c, label),
       wideLine: (x1, y1, x2, y2, w, col) =>
-        `${t}drawWideLine(${x1}, ${y1}, ${x2}, ${y2}, ${w}, ${c(col)});`,
-      // drawArc(x,y, r_outer, r_inner, start, end, fg, bg, smooth)
+        annotate(
+          `${t}drawWideLine(${x1}, ${y1}, ${x2}, ${y2}, ${w}, ${c(col)});`,
+          `x1,y1 → x2,y2 | толщина | цвет`
+        ),
+      // TFT_eSPI: drawArc уже заливает кольцо r…ir (отдельного fillArc нет)
       arc: (cx, cy, r0, r1, a0, a1, col) =>
-        `${t}drawArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)}, ${c(col)}, false);`,
+        annotate(
+          `${t}drawArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)}, ${c(col)}, false);`,
+          `${arcParamNote(r0, r1, a0, a1, "fg,bg,smooth")}`
+        ),
       fillArc: (cx, cy, r0, r1, a0, a1, col) =>
-        `${t}drawArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)}, ${c(col)}, false);`,
-      bitmapRgb: (x, y, name, w, h) => `${t}pushImage(${x}, ${y}, ${w}, ${h}, ${name});`,
+        annotate(
+          `${t}drawArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)}, ${c(col)}, false);`,
+          `${arcParamNote(r0, r1, a0, a1, "fg,bg,smooth")}`
+        ),
+      bitmapRgb: (x, y, name, w, h) =>
+        annotate(`${t}pushImage(${x}, ${y}, ${w}, ${h}, ${name});`, `x,y | w,h | массив RGB565`),
       arcRing: true,
       arcAngle: "tft_espi",
       arcApprox: false,
@@ -299,12 +372,22 @@ function apiFor(lib, project = null) {
     return {
       ...gfxBase(t, c, label),
       wideLine: (x1, y1, x2, y2, w, col) =>
-        `${t}drawWideLine(${x1}, ${y1}, ${x2}, ${y2}, ${Math.max(0.5, w / 2)}, ${c(col)});`,
+        annotate(
+          `${t}drawWideLine(${x1}, ${y1}, ${x2}, ${y2}, ${Math.max(0.5, w / 2)}, ${c(col)});`,
+          `x1,y1 → x2,y2 | полутолщина Lovyan | цвет`
+        ),
       arc: (cx, cy, r0, r1, a0, a1, col) =>
-        `${t}drawArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)});`,
+        annotate(
+          `${t}drawArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)});`,
+          `${arcParamNote(r0, r1, a0, a1, "контур")}`
+        ),
       fillArc: (cx, cy, r0, r1, a0, a1, col) =>
-        `${t}fillArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)});`,
-      bitmapRgb: (x, y, name, w, h) => `${t}pushImage(${x}, ${y}, ${w}, ${h}, ${name});`,
+        annotate(
+          `${t}fillArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)});`,
+          `${arcParamNote(r0, r1, a0, a1, "заливка")}`
+        ),
+      bitmapRgb: (x, y, name, w, h) =>
+        annotate(`${t}pushImage(${x}, ${y}, ${w}, ${h}, ${name});`, `x,y | w,h | массив RGB565`),
       arcRing: true,
       arcAngle: "lovyan",
       arcApprox: false,
@@ -315,10 +398,17 @@ function apiFor(lib, project = null) {
     return {
       ...gfxBase(t, c, label),
       arc: (cx, cy, r0, r1, a0, a1, col) =>
-        `${t}drawArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)});`,
+        annotate(
+          `${t}drawArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)});`,
+          `${arcParamNote(r0, r1, a0, a1, "контур")}`
+        ),
       fillArc: (cx, cy, r0, r1, a0, a1, col) =>
-        `${t}fillArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)});`,
-      bitmapRgb: (x, y, name, w, h) => `${t}draw16bitRGBBitmap(${x}, ${y}, ${name}, ${w}, ${h});`,
+        annotate(
+          `${t}fillArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)});`,
+          `${arcParamNote(r0, r1, a0, a1, "заливка")}`
+        ),
+      bitmapRgb: (x, y, name, w, h) =>
+        annotate(`${t}draw16bitRGBBitmap(${x}, ${y}, ${name}, ${w}, ${h});`, `x,y | массив | w,h`),
       arcRing: true,
       arcAngle: "arduino_gfx",
       arcApprox: false,
@@ -331,16 +421,27 @@ function apiFor(lib, project = null) {
       libLabel: label,
       setRotation: (r) => `${t}setDisplayRotation(${u8r[r] || "U8G2_R0"});`,
       fillScreen: () => `${t}clearBuffer();`,
-      line: (x1, y1, x2, y2) => `${t}drawLine(${x1}, ${y1}, ${x2}, ${y2});`,
+      line: (x1, y1, x2, y2) => annotate(`${t}drawLine(${x1}, ${y1}, ${x2}, ${y2});`, `x1,y1 → x2,y2`),
       rect: (x, y, w, h, _c, fill) =>
-        fill ? `${t}drawBox(${x}, ${y}, ${w}, ${h});` : `${t}drawFrame(${x}, ${y}, ${w}, ${h});`,
+        annotate(
+          fill ? `${t}drawBox(${x}, ${y}, ${w}, ${h});` : `${t}drawFrame(${x}, ${y}, ${w}, ${h});`,
+          `x,y | w,h${fill ? " (заливка)" : " (контур)"}`
+        ),
       circle: (cx, cy, r, _c, fill) =>
-        fill ? `${t}drawDisc(${cx}, ${cy}, ${r});` : `${t}drawCircle(${cx}, ${cy}, ${r});`,
-      text: (x, y, text) => [`${t}setFont(u8g2_font_6x12_tr);`, `${t}drawStr(${x}, ${y + 10}, "${esc(text)}");`],
+        annotate(
+          fill ? `${t}drawDisc(${cx}, ${cy}, ${r});` : `${t}drawCircle(${cx}, ${cy}, ${r});`,
+          `центр x,y | радиус${fill ? " (диск)" : ""}`
+        ),
+      text: (x, y, text) => [
+        `${t}setFont(u8g2_font_6x12_tr);`,
+        annotate(`${t}drawStr(${x}, ${y + 10}, "${esc(text)}");`, `x,y(baseline) | строка`),
+      ],
       // U8g2: cnt = ширина в байтах
-      bitmap: (x, y, name, w, h) => `${t}drawBitmap(${x}, ${y}, ${Math.ceil(w / 8)}, ${h}, ${name});`,
+      bitmap: (x, y, name, w, h) =>
+        annotate(`${t}drawBitmap(${x}, ${y}, ${Math.ceil(w / 8)}, ${h}, ${name});`, `x,y | ширина_в_байтах,h | массив`),
       // U8g2: углы 0…255 на полный круг; толщина — несколько радиусов
-      arc: (cx, cy, r0, _r1, a0, a1) => `${t}drawArc(${cx}, ${cy}, ${r0}, ${a0}, ${a1});`,
+      arc: (cx, cy, r0, _r1, a0, a1) =>
+        annotate(`${t}drawArc(${cx}, ${cy}, ${r0}, ${a0}, ${a1});`, `центр x,y | радиус | угол нач,кон (0…255)`),
       arcSingle: true,
       arcAngle: "u8g2",
       arcApprox: false,
@@ -469,7 +570,9 @@ function apiFor(lib, project = null) {
       text: (x, y, text, col) => `// lv_label "${esc(text)}" at (${x},${y}) ${format565(col)}`,
       // LVGL: 0° = 3 часа, по часовой (как Lovyan) — в комментарии уже сконвертированные углы
       arc: (cx, cy, r0, r1, a0, a1, col) =>
-        `// lv_arc / lv_draw_arc center=(${cx},${cy}) r=${r0}..${r1} ${a0}°…${a1}° ${format565(col)}`,
+        `// lv_draw_arc outline center=(${cx},${cy}) r=${r0}..${r1} ${a0}°…${a1}° ${format565(col)}`,
+      fillArc: (cx, cy, r0, r1, a0, a1, col) =>
+        `// lv_draw_arc filled center=(${cx},${cy}) r=${r0}..${r1} ${a0}°…${a1}° ${format565(col)}`,
       arcRing: true,
       arcAngle: "lovyan",
       arcApprox: false,
@@ -620,6 +723,8 @@ export function codegenScreen(project, lib) {
   lines.push(`// GUI Draw Master — ${lib.label}`);
   lines.push(`// ${project.width}x${project.height} px, origin (0,0), ${orientationLabel(project.orientationId)}`);
   lines.push(`// вызовы: ${prefix}…  (имя/«.»|«->» — в настройках «Объект в коде»)`);
+  for (const tip of arcLegendLines(lib)) lines.push(tip);
+  lines.push(`// у каждой строки кода — комментарий с расшифровкой аргументов (удобно править под Proteus/железо)`);
 
   const emitOne = (obj) => {
     lines.push(``);
