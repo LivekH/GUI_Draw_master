@@ -459,13 +459,25 @@ html, body {
   cursor: default;
 }
 
+.bg-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
 .bg-label {
   font-size: 0.68rem;
   color: var(--muted);
+  flex-shrink: 0;
+  line-height: 1;
 }
 
 .bar-swatches {
-  max-width: 240px;
+  max-width: 280px;
+  flex: 1;
+  min-width: 0;
 }
 
 .selbox {
