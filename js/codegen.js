@@ -144,18 +144,42 @@ function emitArcApprox(api, cx, cy, r, a0, a1, col, lines, segments = 24, thickn
 }
 
 /**
- * Углы редактора: 0° = вверх, по часовой.
- * Разные библиотеки считают 0° по-своему — конвертируем здесь.
+ * Система углов редактора (холст / polar / шкалы):
+ *   0° = вверх (12ч), 90° = вправо, 180° = вниз, 270° = влево
+ *   Рост угла = по часовой стрелке.
+ *
+ * Библиотеки (по исходникам / докам):
+ *   TFT_eSPI:     0° = вниз (6ч), рост по часовой, градусы 0…360
+ *   LovyanGFX / Arduino_GFX / LVGL:
+ *                 0° = вправо (3ч), рост по часовой (cos/sin, Y вниз)
+ *   U8g2:         0° = вправо (3ч), рост против часовой, единицы 0…255
+ *
+ * U8g2 — отражение ориентации (90−E), поэтому start/end меняем местами.
  */
 function toLibAngles(api, a0, a1) {
   const mode = api.arcAngle || "raw";
-  const map = (a) => {
-    if (mode === "tft_espi") return normArc(a + 180); // 0° у TFT_eSPI = 6 часов
-    if (mode === "lovyan" || mode === "arduino_gfx") return normArc(90 - a); // 0° = 3 часа, против часовой
-    if (mode === "u8g2") return Math.round((((normArc(a + 90) % 360) * 256) / 360) % 256); // 0…255
-    return a;
-  };
-  return { a0: map(a0), a1: map(a1) };
+
+  if (mode === "raw") {
+    return { a0, a1 };
+  }
+
+  // TFT_eSPI: 0=6ч CW  ←  editor 0=12ч CW  ⇒  +180°
+  if (mode === "tft_espi") {
+    return { a0: Math.round(normArc(a0 + 180)), a1: Math.round(normArc(a1 + 180)) };
+  }
+
+  // Lovyan / Arduino_GFX / LVGL: 0=3ч CW  ←  editor 0=12ч CW  ⇒  +270° (−90°)
+  if (mode === "lovyan" || mode === "arduino_gfx") {
+    return { a0: Math.round(normArc(a0 + 270)), a1: Math.round(normArc(a1 + 270)) };
+  }
+
+  // U8g2: 0=3ч CCW, 0…255; отражение 90−E + swap концов
+  if (mode === "u8g2") {
+    const toU8 = (a) => Math.round((normArc(90 - a) * 256) / 360) % 256;
+    return { a0: toU8(a1), a1: toU8(a0) };
+  }
+
+  return { a0, a1 };
 }
 
 /** Нативная дуга библиотеки или fallback линиями */
@@ -252,14 +276,7 @@ function apiFor(lib) {
     return {
       ...gfxBase(t, c, label),
       wideLine: (x1, y1, x2, y2, w, col) =>
-        `${t}.drawWideLine(${x1}, ${y1}, ${x2}, ${y2}, ${w}, ${c(col)});`,
-      arc: (cx, cy, r0, r1, a0, a1, col) =>
-        `${t}.drawArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)});`,
-      fillArc: (cx, cy, r0, r1, a0, a1, col) =>
-        `${t}.fillArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)});`,
-      bitmapRgb: (x, y, name, w, h) => `${t}.pushImage(${x}, ${y}, ${w}, ${h}, ${name});`,
-      arcRing: true,
-      arcAngle: "lovyan",
+        `${t}.drawWideLine(${x1}, ${y1}, ${x2}, ${y2}, ${Math.max(0.5, w / 2)}, ${c(col)});`,
       arcApprox: false,
     };
   }
@@ -404,14 +421,8 @@ function apiFor(lib) {
         `${t}.setPrintPos(${x}, ${y});`,
         `${t}.print("${esc(text)}");`,
       ],
-      // Ucglib: углы в градусах, 0 = 3 часа
-      arc: (cx, cy, r0, _r1, a0, a1, col) => [
-        `${t}.setColor(${rgb(col)});`,
-        `${t}.drawArc(${cx}, ${cy}, ${r0}, ${a0}, ${a1}, 0);`,
-      ],
-      arcSingle: true,
-      arcAngle: "arduino_gfx",
-      arcApprox: false,
+      // Ucglib: drawArc нет — только круг/диск/линии
+      arcApprox: true,
     };
   }
 
@@ -426,10 +437,11 @@ function apiFor(lib) {
       circle: (cx, cy, r, col, fill) =>
         `// lv ${fill ? "fill" : "draw"} circle (${cx},${cy}) r=${r} ${format565(col)}`,
       text: (x, y, text, col) => `// lv_label "${esc(text)}" at (${x},${y}) ${format565(col)}`,
+      // LVGL: 0° = 3 часа, по часовой (как Lovyan) — в комментарии уже сконвертированные углы
       arc: (cx, cy, r0, r1, a0, a1, col) =>
         `// lv_arc / lv_draw_arc center=(${cx},${cy}) r=${r0}..${r1} ${a0}°…${a1}° ${format565(col)}`,
       arcRing: true,
-      arcAngle: "raw",
+      arcAngle: "lovyan",
       arcApprox: false,
     };
   }
