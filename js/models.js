@@ -43,6 +43,12 @@ export const TOOLS = [
     glyph: "T",
     hint: "Текстовая надпись. Размер шрифта на дисплее зависит от библиотеки (setTextSize).",
   },
+  {
+    type: "bitmap",
+    label: "Иконка",
+    glyph: "▣",
+    hint: "Импорт PNG/BMP. Режим Ч/Б (1-bit) или Цвет RGB565. Масштаб в свойствах → drawBitmap / pushImage.",
+  },
 ];
 
 let _id = 1;
@@ -155,6 +161,23 @@ function defaults(type, W, H) {
         textSize: 2,
         fill: "#e8eef6",
       };
+    case "bitmap":
+      return {
+        type: "bitmap",
+        name: "Иконка",
+        x: Math.round(W * 0.1),
+        y: Math.round(H * 0.1),
+        w: 64,
+        h: 32,
+        colorMode: "mono",
+        threshold: 128,
+        invert: false,
+        color: "#ffffff",
+        srcDataUrl: null,
+        bits: null,
+        rgb: null,
+        bytes: 0,
+      };
     default:
       throw new Error(type);
   }
@@ -216,6 +239,7 @@ export function elementBounds(el) {
         h: Math.abs(el.y2 - el.y1) || 1,
       };
     case "rect":
+    case "bitmap":
       return { x: el.x, y: el.y, w: el.w, h: el.h };
     case "text":
       return { x: el.x, y: el.y, w: Math.max(40, (el.text || "").length * (el.fontSize || 12) * 0.6), h: el.fontSize || 12 };

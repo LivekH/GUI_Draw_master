@@ -3,6 +3,14 @@ import { TOOLS, createProject, createElement, elementBounds, resetIdCounter, nex
 import { renderProject } from "./renderer.js";
 import { codegenObject, codegenScreen } from "./codegen.js";
 import { format565 } from "./color.js";
+import {
+  readFileAsDataURL,
+  loadImage,
+  fitSize,
+  rasterizeBitmap,
+  bitsToImageData,
+  rgb565ToImageData,
+} from "./bitmap.js";
 
 const state = {
   project: createProject(),
@@ -37,6 +45,7 @@ const els = {
   libTag: $("lib-tag"),
   zoomLabel: $("zoom-label"),
   fileOpen: $("file-open"),
+  fileImg: $("file-img"),
   btnGrid: $("btn-grid"),
   rulerH: $("ruler-h"),
   rulerV: $("ruler-v"),
@@ -346,6 +355,10 @@ function renderToolbox() {
     btn.className = "tool";
     btn.innerHTML = `<span class="g">${t.glyph}</span>${t.label}`;
     btn.addEventListener("click", () => {
+      if (t.type === "bitmap") {
+        els.fileImg?.click();
+        return;
+      }
       const el = createElement(t.type, state.project.width, state.project.height);
       state.project.widgets.push(el);
       setSelection([el.id]);
@@ -354,6 +367,50 @@ function renderToolbox() {
     attachHelp(btn, t.label, t.hint);
     els.toolbox.appendChild(btn);
   }
+}
+
+async function refreshBitmapElement(el) {
+  if (!el || el.type !== "bitmap" || !el.srcDataUrl) return;
+  const mode = el.colorMode === "rgb565" ? "rgb565" : "mono";
+  const result = await rasterizeBitmap(el.srcDataUrl, el.w, el.h, {
+    mode,
+    threshold: el.threshold ?? 128,
+    invert: !!el.invert,
+  });
+  el.bits = result.bits;
+  el.rgb = result.rgb;
+  el.bytes = result.bytes;
+  el.w = result.w;
+  el.h = result.h;
+  const idata =
+    mode === "rgb565" && result.rgb
+      ? rgb565ToImageData(result.rgb, result.w, result.h)
+      : bitsToImageData(result.bits, result.w, result.h);
+  const c = document.createElement("canvas");
+  c.width = result.w;
+  c.height = result.h;
+  c.getContext("2d").putImageData(idata, 0, 0);
+  el._preview = c;
+}
+
+async function importImageFile(file) {
+  if (!file) return;
+  const dataUrl = await readFileAsDataURL(file);
+  const img = await loadImage(dataUrl);
+  const maxW = Math.min(state.project.width, 320);
+  const maxH = Math.min(state.project.height, 240);
+  const { w, h } = fitSize(img.width, img.height, maxW, maxH);
+  const el = createElement("bitmap", state.project.width, state.project.height);
+  el.name = (file.name || "Иконка").replace(/\.[^.]+$/, "").slice(0, 40) || "Иконка";
+  el.srcDataUrl = dataUrl;
+  el.w = w;
+  el.h = h;
+  el.x = Math.round((state.project.width - w) / 2);
+  el.y = Math.round((state.project.height - h) / 2);
+  await refreshBitmapElement(el);
+  state.project.widgets.push(el);
+  setSelection([el.id]);
+  redraw();
 }
 
 function makeVisBtn(visible, onToggle) {
@@ -490,6 +547,13 @@ const PROP_HELP = {
   Текст: "Строка, которая уйдёт в print / drawStr.",
   "Размер шрифта": "Высота текста в пикселях на холсте (превью).",
   "Режим текста": "setTextSize(1/2/3) для кода на дисплее. При смене режима высота превью подстраивается (~8 px × размер).",
+  "Режим иконки": "Ч/Б (1-bit, мало flash) или Цвет RGB565 (2 байта на пиксель, для TFT). На mono OLED лучше Ч/Б.",
+  "Ширина иконки": "Ширина bitmap после масштаба (px). Пересчитывает массив.",
+  "Высота иконки": "Высота bitmap после масштаба (px).",
+  Порог: "Только для Ч/Б: яркость 0…255, темнее = пиксель «вкл». Обычно 128.",
+  Инверсия: "Только для Ч/Б: поменять чёрное/белое.",
+  "Цвет (draw)": "Только для Ч/Б на цветном TFT: цвет «включённых» пикселей в drawBitmap.",
+  "Размер flash": "Сколько байт займёт массив во flash МК.",
 };
 
 /** Подсказка после удержания курсора ~10 с */
@@ -889,6 +953,83 @@ function renderProps() {
       );
       els.props.appendChild(propColor("Цвет", el.fill, (v) => patch("fill", v)));
       break;
+    case "bitmap": {
+      const isRgb = el.colorMode === "rgb565";
+      const disp = getDisplay(state.project.displayId);
+      const note = document.createElement("p");
+      note.className = "muted";
+      note.style.margin = "0 0 0.35rem";
+      const modeLabel = isRgb ? "RGB565" : "1-bit";
+      note.textContent = el.srcDataUrl
+        ? `Flash ≈ ${el.bytes || 0} байт (${modeLabel}). Масштаб пересчитывает массив.`
+        : "Импортируйте PNG/BMP кнопкой «Иконка» или инструментом слева.";
+      if (isRgb && disp?.kind === "oled") {
+        note.textContent += " На mono OLED лучше режим Ч/Б.";
+      }
+      els.props.appendChild(note);
+      els.props.appendChild(propNum("X", el.x, (v) => patch("x", Math.round(v))));
+      els.props.appendChild(propNum("Y", el.y, (v) => patch("y", Math.round(v))));
+      els.props.appendChild(
+        propSelect(
+          "Режим иконки",
+          el.colorMode || "mono",
+          [
+            { value: "mono", label: "Ч/Б (1-bit)" },
+            { value: "rgb565", label: "Цвет RGB565" },
+          ],
+          async (v) => {
+            el.colorMode = v === "rgb565" ? "rgb565" : "mono";
+            await refreshBitmapElement(el);
+            redraw();
+            renderProps();
+          }
+        )
+      );
+      const rescale = async (nw, nh) => {
+        el.w = Math.max(1, Math.min(800, Math.round(nw)));
+        el.h = Math.max(1, Math.min(800, Math.round(nh)));
+        await refreshBitmapElement(el);
+        redraw();
+      };
+      els.props.appendChild(
+        propNum("Ширина иконки", el.w, (v) => rescale(v, el.h), { min: 1, max: 800 })
+      );
+      els.props.appendChild(
+        propNum("Высота иконки", el.h, (v) => rescale(el.w, v), { min: 1, max: 800 })
+      );
+      if (!isRgb) {
+        els.props.appendChild(
+          propNum(
+            "Порог",
+            el.threshold ?? 128,
+            async (v) => {
+              el.threshold = Math.max(0, Math.min(255, Math.round(v)));
+              await refreshBitmapElement(el);
+              redraw();
+            },
+            { min: 0, max: 255 }
+          )
+        );
+        els.props.appendChild(
+          propCheck("Инверсия", !!el.invert, async (v) => {
+            el.invert = v;
+            await refreshBitmapElement(el);
+            redraw();
+          })
+        );
+        els.props.appendChild(propColor("Цвет (draw)", el.color || "#ffffff", (v) => patch("color", v)));
+      }
+      const reimport = document.createElement("button");
+      reimport.type = "button";
+      reimport.className = "ghost";
+      reimport.textContent = "Заменить файл…";
+      reimport.addEventListener("click", () => {
+        state._bitmapReplaceId = el.id;
+        els.fileImg?.click();
+      });
+      els.props.appendChild(reimport);
+      break;
+    }
     default:
       break;
   }
@@ -1000,7 +1141,9 @@ function duplicateSelected() {
     newIds.push(copy.id);
   }
   setSelection(newIds);
-  redraw();
+  Promise.all(
+    state.project.widgets.filter((w) => newIds.includes(w.id) && w.type === "bitmap").map(refreshBitmapElement)
+  ).then(() => redraw());
 }
 
 function createGroupFromSelection() {
@@ -1327,7 +1470,12 @@ bindPanelSplit("split-insp", "--insp-w", { min: 200, max: 520, fromRight: true }
 function saveProject() {
   const name = prompt("Имя проекта", state.project.name || "Untitled");
   if (name) state.project.name = name;
-  const blob = new Blob([JSON.stringify(state.project, null, 2)], { type: "application/json" });
+  const json = JSON.stringify(
+    state.project,
+    (k, v) => (k === "_preview" ? undefined : v),
+    2
+  );
+  const blob = new Blob([json], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = `${state.project.name || "gui-draw-master"}.json`;
@@ -1336,6 +1484,37 @@ function saveProject() {
 }
 
 $("btn-save").addEventListener("click", saveProject);
+$("btn-import-img")?.addEventListener("click", () => {
+  state._bitmapReplaceId = null;
+  els.fileImg?.click();
+});
+els.fileImg?.addEventListener("change", async () => {
+  const file = els.fileImg.files?.[0];
+  els.fileImg.value = "";
+  if (!file) return;
+  try {
+    if (state._bitmapReplaceId) {
+      const el = state.project.widgets.find((w) => w.id === state._bitmapReplaceId);
+      state._bitmapReplaceId = null;
+      if (el && el.type === "bitmap") {
+        el.srcDataUrl = await readFileAsDataURL(file);
+        await refreshBitmapElement(el);
+        setSelection([el.id]);
+        redraw();
+        return;
+      }
+    }
+    await importImageFile(file);
+  } catch (err) {
+    alert("Импорт изображения: " + err.message);
+  }
+});
+attachHelp(
+  $("btn-import-img"),
+  "Иконка PNG/BMP",
+  "Импорт PNG/BMP на холст. В свойствах: Ч/Б или RGB565, масштаб. В коде: PROGMEM + drawBitmap / pushImage."
+);
+
 $("btn-new").addEventListener("click", () => {
   if (!confirm("Новый проект?")) return;
   const d = state.project.displayId;
@@ -1368,6 +1547,7 @@ els.fileOpen.addEventListener("change", async () => {
     for (const w of data.widgets) {
       if (w.visible === undefined) w.visible = true;
       if (w.groupId === undefined) w.groupId = null;
+      if (w.type === "bitmap" && !w.colorMode) w.colorMode = "mono";
     }
     state.project = data;
     setSelection([]);
@@ -1387,6 +1567,9 @@ els.fileOpen.addEventListener("change", async () => {
     els.orient.value = data.orientationId || "portrait";
     fillLibraries();
     els.library.value = data.libraryId || state.project.libraryId;
+    await Promise.all(
+      state.project.widgets.filter((w) => w.type === "bitmap" && w.srcDataUrl).map(refreshBitmapElement)
+    );
     redraw();
   } catch (err) {
     alert("Ошибка: " + err.message);

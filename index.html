@@ -55,6 +55,7 @@
           <button type="button" id="btn-new" class="ghost">Новый</button>
           <button type="button" id="btn-open" class="ghost">Открыть</button>
           <button type="button" id="btn-save" class="ghost">Сохранить</button>
+          <button type="button" id="btn-import-img" class="ghost" title="PNG/BMP → ч/б bitmap">Иконка PNG/BMP</button>
           <button type="button" id="btn-code" class="ghost" title="Показать / скрыть код экрана">Код экрана</button>
           <button type="button" id="btn-copy-all" class="ghost">Копировать код</button>
           <span class="bar-sep"></span>
@@ -133,6 +134,7 @@
   </div>
 
   <input type="file" id="file-open" accept=".json,application/json" hidden />
+  <input type="file" id="file-img" accept="image/png,image/bmp,image/x-ms-bmp,.png,.bmp" hidden />
   <script type="module" src="js/main.js"></script>
 </body>
 </html>

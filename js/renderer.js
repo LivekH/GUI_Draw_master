@@ -86,6 +86,45 @@ export function drawElement(ctx, el) {
       ctx.fillText(el.text || "", el.x, el.y);
       break;
 
+    case "bitmap": {
+      const w = el.w || 1;
+      const h = el.h || 1;
+      if (el._preview) {
+        ctx.drawImage(el._preview, el.x, el.y, w, h);
+      } else if (el.colorMode === "rgb565" && el.rgb && el.rgb.length) {
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            const c = el.rgb[y * w + x] || 0;
+            if (!c) continue;
+            const r = ((c >> 11) & 0x1f) << 3;
+            const g = ((c >> 5) & 0x3f) << 2;
+            const b = (c & 0x1f) << 3;
+            ctx.fillStyle = `rgb(${r},${g},${b})`;
+            ctx.fillRect(el.x + x, el.y + y, 1, 1);
+          }
+        }
+      } else if (el.bits && el.bits.length) {
+        const rowBytes = Math.ceil(w / 8);
+        const col = el.color || "#ffffff";
+        ctx.fillStyle = col;
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            const bi = y * rowBytes + (x >> 3);
+            if (el.bits[bi] & (0x80 >> (x & 7))) {
+              ctx.fillRect(el.x + x, el.y + y, 1, 1);
+            }
+          }
+        }
+      } else {
+        ctx.strokeStyle = "rgba(255,255,255,0.35)";
+        ctx.strokeRect(el.x + 0.5, el.y + 0.5, w - 1, h - 1);
+        ctx.fillStyle = "rgba(255,255,255,0.2)";
+        ctx.font = "10px sans-serif";
+        ctx.fillText("PNG/BMP", el.x + 4, el.y + 14);
+      }
+      break;
+    }
+
     case "scale": {
       if (el.showArc !== false) {
         ctx.strokeStyle = el.arcColor;

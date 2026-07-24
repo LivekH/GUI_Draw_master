@@ -2,6 +2,7 @@
  * Code generators — map canvas objects → library draw calls
  */
 import { format565, formatUtftColor, isOn, hexToRgb } from "./color.js";
+import { bitsToCArray, rgb565ToCArray, safeArrayName } from "./bitmap.js";
 
 export function polar(cx, cy, r, deg) {
   const a = ((deg - 90) * Math.PI) / 180;
@@ -219,6 +220,8 @@ function gfxBase(t, c, libLabel) {
       `${t}.setCursor(${x}, ${y});`,
       `${t}.print("${esc(text)}");`,
     ],
+    bitmap: (x, y, name, w, h, col) => `${t}.drawBitmap(${x}, ${y}, ${name}, ${w}, ${h}, ${c(col)});`,
+    bitmapRgb: (x, y, name, w, h) => `${t}.drawRGBBitmap(${x}, ${y}, ${name}, ${w}, ${h});`,
   };
 }
 
@@ -238,6 +241,7 @@ function apiFor(lib) {
         `${t}.drawArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)}, ${c(col)}, false);`,
       fillArc: (cx, cy, r0, r1, a0, a1, col) =>
         `${t}.drawArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)}, ${c(col)}, false);`,
+      bitmapRgb: (x, y, name, w, h) => `${t}.pushImage(${x}, ${y}, ${w}, ${h}, ${name});`,
       arcRing: true,
       arcAngle: "tft_espi",
       arcApprox: false,
@@ -253,6 +257,7 @@ function apiFor(lib) {
         `${t}.drawArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)});`,
       fillArc: (cx, cy, r0, r1, a0, a1, col) =>
         `${t}.fillArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)});`,
+      bitmapRgb: (x, y, name, w, h) => `${t}.pushImage(${x}, ${y}, ${w}, ${h}, ${name});`,
       arcRing: true,
       arcAngle: "lovyan",
       arcApprox: false,
@@ -266,6 +271,7 @@ function apiFor(lib) {
         `${t}.drawArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)});`,
       fillArc: (cx, cy, r0, r1, a0, a1, col) =>
         `${t}.fillArc(${cx}, ${cy}, ${r0}, ${r1}, ${a0}, ${a1}, ${c(col)});`,
+      bitmapRgb: (x, y, name, w, h) => `${t}.draw16bitRGBBitmap(${x}, ${y}, ${name}, ${w}, ${h});`,
       arcRing: true,
       arcAngle: "arduino_gfx",
       arcApprox: false,
@@ -284,6 +290,8 @@ function apiFor(lib) {
       circle: (cx, cy, r, _c, fill) =>
         fill ? `${t}.drawDisc(${cx}, ${cy}, ${r});` : `${t}.drawCircle(${cx}, ${cy}, ${r});`,
       text: (x, y, text) => [`${t}.setFont(u8g2_font_6x12_tr);`, `${t}.drawStr(${x}, ${y + 10}, "${esc(text)}");`],
+      // U8g2: cnt = ширина в байтах
+      bitmap: (x, y, name, w, h) => `${t}.drawBitmap(${x}, ${y}, ${Math.ceil(w / 8)}, ${h}, ${name});`,
       // U8g2: углы 0…255 на полный круг; толщина — несколько радиусов
       arc: (cx, cy, r0, _r1, a0, a1) => `${t}.drawArc(${cx}, ${cy}, ${r0}, ${a0}, ${a1});`,
       arcSingle: true,
@@ -320,6 +328,7 @@ function apiFor(lib) {
       circle: (cx, cy, r, _c, fill) =>
         fill ? `${t}.fillCircle(${cx}, ${cy}, ${r});` : `${t}.drawCircle(${cx}, ${cy}, ${r});`,
       text: (x, y, text) => `${t}.drawString(${x}, ${y}, "${esc(text)}");`,
+      bitmap: (x, y, name, w, h) => `${t}.drawFastImage(${x}, ${y}, ${w}, ${h}, ${name}); // 1-bit XBM-style — проверьте API`,
       arcApprox: true,
       footer: () => `${t}.display();`,
     };
@@ -432,7 +441,7 @@ function apiFor(lib) {
   };
 }
 
-function emitObject(obj, lib, lines, api) {
+function emitObject(obj, lib, lines, api, decls = null) {
   switch (obj.type) {
     case "line": {
       const th = Math.max(1, obj.thickness || 1);
@@ -468,6 +477,57 @@ function emitObject(obj, lib, lines, api) {
     case "sector":
       emitSector(api, obj.cx, obj.cy, obj.r, obj.startAngle, obj.endAngle, obj.fill, lines);
       break;
+    case "bitmap": {
+      const mode = obj.colorMode === "rgb565" ? "rgb565" : "mono";
+      const w = obj.w | 0;
+      const h = obj.h | 0;
+      const arr = safeArrayName(obj.id, obj.name);
+
+      if (mode === "rgb565") {
+        if (!obj.rgb || !obj.rgb.length) {
+          lines.push(`// ${obj.name || "bitmap"}: нет RGB565 — импортируйте PNG/BMP`);
+          break;
+        }
+        const header = `// ${obj.name || "bitmap"} — ${w}x${h} px, ${obj.bytes || obj.rgb.length * 2} bytes (RGB565)`;
+        const arrLines = rgb565ToCArray(obj.rgb, arr);
+        if (decls) {
+          decls.push(header);
+          decls.push(...arrLines);
+          decls.push(``);
+        } else {
+          lines.push(header);
+          push(lines, arrLines);
+        }
+        if (api.bitmapRgb) {
+          push(lines, api.bitmapRgb(obj.x, obj.y, arr, w, h));
+        } else {
+          lines.push(
+            `// RGB565: pushImage/drawRGBBitmap(${obj.x},${obj.y}, ${arr}, ${w}, ${h}) — на mono OLED лучше режим Ч/Б`
+          );
+        }
+      } else {
+        if (!obj.bits || !obj.bits.length) {
+          lines.push(`// ${obj.name || "bitmap"}: нет данных — импортируйте PNG/BMP`);
+          break;
+        }
+        const header = `// ${obj.name || "bitmap"} — ${w}x${h} px, ${obj.bytes || obj.bits.length} bytes (1-bit)`;
+        const arrLines = bitsToCArray(obj.bits, arr);
+        if (decls) {
+          decls.push(header);
+          decls.push(...arrLines);
+          decls.push(``);
+        } else {
+          lines.push(header);
+          push(lines, arrLines);
+        }
+        if (api.bitmap) {
+          push(lines, api.bitmap(obj.x, obj.y, arr, w, h, obj.color || "#ffffff"));
+        } else {
+          lines.push(`// drawBitmap(${obj.x}, ${obj.y}, ${arr}, ${w}, ${h})`);
+        }
+      }
+      break;
+    }
     case "scale": {
       if (obj.showArc !== false) {
         const th = Math.max(1, obj.arcThickness || 2);
@@ -504,16 +564,26 @@ function indent(item) {
 export function codegenObject(obj, lib) {
   const lines = [];
   lines.push(`// ${obj.name || obj.type}`);
-  emitObject(obj, lib, lines, apiFor(lib));
+  emitObject(obj, lib, lines, apiFor(lib), null);
   return lines.join("\n");
 }
 
 export function codegenScreen(project, lib) {
   const lines = [];
+  const decls = [];
   const api = apiFor(lib);
   const rot = orientationToRotation(project.orientationId);
   lines.push(`// GUI Draw Master — ${lib.label}`);
   lines.push(`// ${project.width}x${project.height} px, origin (0,0), ${orientationLabel(project.orientationId)}`);
+
+  const emitOne = (obj) => {
+    lines.push(``);
+    lines.push(`  // ${obj.name || obj.type}`);
+    const chunk = [];
+    emitObject(obj, lib, chunk, api, decls);
+    for (const ln of chunk) push(lines, indent(ln));
+  };
+
   lines.push(`void drawGui() {`);
   lines.push(`  // ориентация экрана (0=0°, 1=90°, 2=180°, 3=270°)`);
   if (api.setRotation) {
@@ -535,20 +605,12 @@ export function codegenScreen(project, lib) {
       lines.push(`  // ===== группа: ${gname} =====`);
       for (const m of project.widgets) {
         if (m.groupId !== obj.groupId || m.visible === false) continue;
-        lines.push(``);
-        lines.push(`  // ${m.name || m.type}`);
-        const chunk = [];
-        emitObject(m, lib, chunk, api);
-        for (const ln of chunk) push(lines, indent(ln));
+        emitOne(m);
       }
       lines.push(`  // ===== /${gname} =====`);
       continue;
     }
-    lines.push(``);
-    lines.push(`  // ${obj.name || obj.type}`);
-    const chunk = [];
-    emitObject(obj, lib, chunk, api);
-    for (const ln of chunk) push(lines, indent(ln));
+    emitOne(obj);
   }
   if (api.footer) {
     lines.push(``);
@@ -556,5 +618,14 @@ export function codegenScreen(project, lib) {
     push(lines, indent(api.footer()));
   }
   lines.push(`}`);
+
+  if (decls.length) {
+    return [
+      `// --- bitmap данные (PROGMEM) ---`,
+      ...decls,
+      ``,
+      ...lines,
+    ].join("\n");
+  }
   return lines.join("\n");
 }
