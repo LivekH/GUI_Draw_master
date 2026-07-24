@@ -1,9 +1,9 @@
 /**
  * Code generators — map canvas objects → library draw calls
  */
-import { format565, formatUtftColor, isOn, hexToRgb } from "./color.js?v=20260724e";
-import { bitsToCArray, rgb565ToCArray, safeArrayName } from "./bitmap.js?v=20260724e";
-import { libCallPrefix } from "./catalog.js?v=20260724e";
+import { format565, formatUtftColor, isOn, hexToRgb } from "./color.js?v=20260724f";
+import { bitsToCArray, rgb565ToCArray, safeArrayName } from "./bitmap.js?v=20260724f";
+import { libCallPrefix } from "./catalog.js?v=20260724f";
 
 export function polar(cx, cy, r, deg) {
   const a = ((deg - 90) * Math.PI) / 180;
@@ -156,9 +156,20 @@ function emitArcApprox(api, cx, cy, r, a0, a1, col, lines, segments = 24, thickn
  *   U8g2:         0° = вправо (3ч), рост против часовой, единицы 0…255
  *
  * U8g2 — отражение ориентации (90−E), поэтому start/end меняем местами.
+ * Полный оборот (|Δ|≥360°) не сдвигаем по нулю — иначе 0° и 360° схлопываются в одну точку.
  */
+function isFullSweep(a0, a1) {
+  return Math.abs(Number(a1) - Number(a0)) >= 359.5;
+}
+
 function toLibAngles(api, a0, a1) {
   const mode = api.arcAngle || "raw";
+
+  // Полное кольцо → всегда 0…360 (U8g2: 0…255), один drawArc(r0,r1,…)
+  if (isFullSweep(a0, a1)) {
+    if (mode === "u8g2") return { a0: 0, a1: 255 };
+    return { a0: 0, a1: 360 };
+  }
 
   if (mode === "raw") {
     return { a0, a1 };

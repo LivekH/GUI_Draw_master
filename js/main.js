@@ -1,8 +1,8 @@
-import { DISPLAYS, ORIENTATIONS, LIBRARIES, filterLibraries, resolveSize, getDisplay, syncCodeObjFromLib } from "./catalog.js?v=20260724e";
-import { TOOLS, createProject, createElement, elementBounds, resetIdCounter, nextId, nextGroupId, resetGroupCounter, getGroup, groupMembers } from "./models.js?v=20260724e";
-import { renderProject } from "./renderer.js?v=20260724e";
-import { codegenObject, codegenScreen } from "./codegen.js?v=20260724e";
-import { format565 } from "./color.js?v=20260724e";
+import { DISPLAYS, ORIENTATIONS, LIBRARIES, filterLibraries, resolveSize, getDisplay, syncCodeObjFromLib } from "./catalog.js?v=20260724f";
+import { TOOLS, createProject, createElement, elementBounds, resetIdCounter, nextId, nextGroupId, resetGroupCounter, getGroup, groupMembers } from "./models.js?v=20260724f";
+import { renderProject } from "./renderer.js?v=20260724f";
+import { codegenObject, codegenScreen } from "./codegen.js?v=20260724f";
+import { format565 } from "./color.js?v=20260724f";
 import {
   readFileAsDataURL,
   loadImage,
@@ -10,7 +10,7 @@ import {
   rasterizeBitmap,
   bitsToImageData,
   rgb565ToImageData,
-} from "./bitmap.js?v=20260724e";
+} from "./bitmap.js?v=20260724f";
 
 const state = {
   project: createProject(),
@@ -545,9 +545,9 @@ const PROP_HELP = {
   "Радиус внут.": "Внутренний край major-делений. Чем меньше разница с внешним — тем короче штрихи.",
   "Радиус подп.": "Радиус размещения числовых подписей (обычно чуть меньше внутренней зоны).",
   "Начало °":
-    "Угол начала дуги в редакторе: 0° — вверх, 90° — вправо, 180° — вниз, 270° — влево; рост по часовой. В коде для каждой библиотеки углы пересчитываются (TFT_eSPI: 0=6ч; Lovyan/Arduino_GFX: 0=3ч CW; U8g2: 0…255, 0=3ч CCW).",
+    "Угол начала дуги в редакторе: 0° — вверх, 90° — вправо, 180° — вниз, 270° — влево; рост по часовой. Полное кольцо: задайте разницу 360° (например 0…360) — в коде будет drawArc(…, 0, 360) с толщиной. В коде для каждой библиотеки углы пересчитываются (TFT_eSPI: 0=6ч; Lovyan/Arduino_GFX: 0=3ч CW; U8g2: 0…255).",
   "Конец °":
-    "Угол конца дуги (та же система, что «Начало °»). Дуга идёт от начала к концу; для шкалы слева→направо часто −120…120.",
+    "Угол конца дуги. Для полного кольца: Начало 0, Конец 360 (или −180…180). Толщина задаёт r_outer−r_inner в одном drawArc.",
   Делений: "Число крупных (major) рисок, включая крайние. Подписей столько же.",
   "Промежут.": "Сколько мелких делений между соседними крупными.",
   "Значение мин.": "Число на первом конце дуги (если не включена инверсия).",
