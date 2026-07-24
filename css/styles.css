@@ -9,8 +9,8 @@
   --accent-2: #5ec8c0;
   --danger: #e07060;
   --code-bg: #0c0b0a;
-  --font: "Sora", system-ui, sans-serif;
-  --mono: "JetBrains Mono", ui-monospace, monospace;
+  --font: "Segoe UI", system-ui, sans-serif;
+  --mono: Consolas, "Courier New", ui-monospace, monospace;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }

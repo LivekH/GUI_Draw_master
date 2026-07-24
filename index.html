@@ -5,9 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>GUI Draw Master</title>
   <link rel="stylesheet" href="css/styles.css" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='24' font-size='24'%3E%E2%97%87%3C/text%3E%3C/svg%3E" />
 </head>
 <body>
   <div id="app">
@@ -149,6 +147,19 @@
 
   <input type="file" id="file-open" accept=".json,application/json" hidden />
   <input type="file" id="file-img" accept="image/png,image/bmp,image/x-ms-bmp,.png,.bmp" hidden />
-  <script type="module" src="js/main.js"></script>
+  <script type="module">
+    import("./js/main.js?v=20260724d").catch((err) => {
+      const pre = document.createElement("pre");
+      pre.style.cssText =
+        "margin:1rem;padding:1rem;background:#5c1010;color:#fff;white-space:pre-wrap;font:13px/1.4 monospace";
+      pre.textContent =
+        "Не удалось загрузить js/main.js\n\n" +
+        err +
+        "\n\nОткройте через GUI master.bat (http://127.0.0.1:8765/), не file://\n" +
+        "Или нажмите Ctrl+F5 для сброса кэша.";
+      document.body.prepend(pre);
+      console.error(err);
+    });
+  </script>
 </body>
 </html>

@@ -59,14 +59,20 @@ const els = {
 };
 
 const ctx = els.canvas ? els.canvas.getContext("2d") : null;
-if (!ctx) {
-  const msg =
-    "Не найден холст (#screen). Откройте проект через GUI master.bat (http://127.0.0.1:8765/), не как file://";
-  console.error(msg);
-  document.body.insertAdjacentHTML(
-    "afterbegin",
-    `<pre style="margin:1rem;padding:1rem;background:#400;color:#fff;white-space:pre-wrap">${msg}</pre>`
-  );
+
+function showBootError(err) {
+  const text = err && err.stack ? String(err.stack) : String(err);
+  console.error(err);
+  const pre = document.createElement("pre");
+  pre.style.cssText =
+    "margin:1rem;padding:1rem;background:#5c1010;color:#fff;white-space:pre-wrap;font:13px/1.4 monospace;position:relative;z-index:99999";
+  pre.textContent = "Ошибка запуска GUI Draw Master:\n\n" + text;
+  document.body.prepend(pre);
+}
+
+function safeOn(el, ev, fn, opts) {
+  if (!el) return;
+  el.addEventListener(ev, fn, opts);
 }
 
 function currentLib() {
@@ -304,6 +310,7 @@ function refreshCode() {
 }
 
 function redraw() {
+  if (!ctx || !els.canvas) return;
   if (!state.project.background) state.project.background = "#000000";
   els.canvas.width = state.project.width;
   els.canvas.height = state.project.height;
@@ -313,7 +320,7 @@ function redraw() {
   renderProps();
   renderBgSwatches();
   refreshCode();
-  els.sizeBadge.textContent = `${state.project.width}×${state.project.height}`;
+  if (els.sizeBadge) els.sizeBadge.textContent = `${state.project.width}×${state.project.height}`;
 }
 
 function fillDisplays() {
@@ -1228,6 +1235,23 @@ function moveElement(el, dx, dy) {
   }
 }
 
+/** Заполнить меню сразу — до привязки событий (если слушатель упадёт, UI уже будет) */
+function bootUi() {
+  fillDisplays();
+  fillOrients();
+  if (els.display) els.display.value = state.project.displayId;
+  if (els.orient) els.orient.value = state.project.orientationId;
+  fillLibraries();
+  renderToolbox();
+  syncCodeObjUi(false);
+}
+
+try {
+  bootUi();
+} catch (err) {
+  showBootError(err);
+}
+
 if (els.canvas) {
   els.canvas.addEventListener("mousedown", (e) => {
   if (e.button !== 0 || e.altKey) return;
@@ -1261,7 +1285,7 @@ if (els.canvas) {
 els.stage?.addEventListener("mousemove", updateCursorPos);
 els.stage?.addEventListener("mouseleave", clearCursorPos);
 
-window.addEventListener("mousemove", (e) => {
+safeOn(window, "mousemove", (e) => {
   if (state.drag) updateCursorPos(e);
   if (!state.drag) return;
   const p = canvasPoint(e);
@@ -1336,7 +1360,7 @@ function copyText(text) {
   );
 }
 
-els.display.addEventListener("change", () => {
+els.display?.addEventListener("change", () => {
   state.project.displayId = els.display.value;
   if (state.project.displayId === "custom") {
     const w = prompt("Ширина (px)", state.project.width);
@@ -1349,12 +1373,12 @@ els.display.addEventListener("change", () => {
   applyDisplayCascade();
 });
 
-els.orient.addEventListener("change", () => {
+els.orient?.addEventListener("change", () => {
   state.project.orientationId = els.orient.value;
   applyDisplayCascade();
 });
 
-els.library.addEventListener("change", () => {
+els.library?.addEventListener("change", () => {
   state.project.libraryId = els.library.value;
   syncCodeObjUi(true);
   refreshCode();
@@ -1372,17 +1396,18 @@ els.codeAccess?.addEventListener("change", () => {
   refreshCode();
 });
 
-$("btn-zoom-in").addEventListener("click", () => {
+safeOn($("btn-zoom-in"), "click", () => {
   state.zoom = Math.min(8, Math.round((state.zoom + 0.25) * 100) / 100);
   applyZoom();
 });
-$("btn-zoom-out").addEventListener("click", () => {
+safeOn($("btn-zoom-out"), "click", () => {
   state.zoom = Math.max(0.5, Math.round((state.zoom - 0.25) * 100) / 100);
   applyZoom();
 });
 
 // Ctrl + колесо — зум; обычное колесо — нативный скролл рабочей области
-els.stageWrap.addEventListener(
+safeOn(
+  els.stageWrap,
   "wheel",
   (e) => {
     if (!e.ctrlKey && !e.metaKey) return; // scroll as usual
@@ -1405,28 +1430,28 @@ els.stageWrap.addEventListener(
 
 // Средняя кнопка / Alt+ЛКМ — панорамирование
 let pan = null;
-els.stageWrap.addEventListener("mousedown", (e) => {
+safeOn(els.stageWrap, "mousedown", (e) => {
   if (e.button === 1 || (e.button === 0 && e.altKey)) {
     e.preventDefault();
     pan = { x: e.clientX, y: e.clientY, sl: els.stageWrap.scrollLeft, st: els.stageWrap.scrollTop };
     els.stageWrap.classList.add("panning");
   }
 });
-window.addEventListener("mousemove", (e) => {
+safeOn(window, "mousemove", (e) => {
   if (!pan) return;
   els.stageWrap.scrollLeft = pan.sl - (e.clientX - pan.x);
   els.stageWrap.scrollTop = pan.st - (e.clientY - pan.y);
 });
-window.addEventListener("mouseup", () => {
+safeOn(window, "mouseup", () => {
   if (!pan) return;
   pan = null;
-  els.stageWrap.classList.remove("panning");
+  els.stageWrap?.classList.remove("panning");
 });
-els.stageWrap.addEventListener("auxclick", (e) => {
+safeOn(els.stageWrap, "auxclick", (e) => {
   if (e.button === 1) e.preventDefault(); // no autoscroll quirk
 });
 
-els.stageWrap.addEventListener("scroll", () => {
+safeOn(els.stageWrap, "scroll", () => {
   if (!_scrollSyncing) syncScrollSliders();
 });
 els.scrollH?.addEventListener("input", () => {
@@ -1437,26 +1462,27 @@ els.scrollV?.addEventListener("input", () => {
   if (_scrollSyncing) return;
   els.stageWrap.scrollTop = Number(els.scrollV.value);
 });
-window.addEventListener("resize", () => syncScrollSliders());
+safeOn(window, "resize", () => syncScrollSliders());
 
-els.btnGrid.addEventListener("click", () => {
+els.btnGrid?.addEventListener("click", () => {
   state.showGrid = !state.showGrid;
   els.btnGrid.classList.toggle("active", state.showGrid);
   redraw();
 });
 
-$("btn-copy-el").addEventListener("click", () => copyText(els.codeEl.textContent));
-$("btn-copy-screen").addEventListener("click", () => copyText(els.codeScreen.textContent));
-$("btn-copy-all").addEventListener("click", () => {
+safeOn($("btn-copy-el"), "click", () => copyText(els.codeEl?.textContent || ""));
+safeOn($("btn-copy-screen"), "click", () => copyText(els.codeScreen?.textContent || ""));
+safeOn($("btn-copy-all"), "click", () => {
   // открыть панель если закрыта, затем копировать
   setCodeDock(true);
-  copyText(els.codeScreen.textContent);
+  copyText(els.codeScreen?.textContent || "");
 });
 
 function setCodeDock(open) {
   const dock = $("code-dock");
   const app = $("app");
   const btn = $("btn-code");
+  if (!dock || !app || !btn) return;
   if (open) {
     dock.hidden = false;
     app.classList.add("code-open");
@@ -1469,15 +1495,16 @@ function setCodeDock(open) {
   requestAnimationFrame(syncScrollSliders);
 }
 
-$("btn-code").addEventListener("click", () => {
-  setCodeDock($("code-dock").hidden);
+safeOn($("btn-code"), "click", () => {
+  setCodeDock($("code-dock")?.hidden);
 });
-$("btn-code-close").addEventListener("click", () => setCodeDock(false));
+safeOn($("btn-code-close"), "click", () => setCodeDock(false));
 
 /** Resize side panels */
 function bindPanelSplit(handleId, cssVar, { min, max, fromRight }) {
   const handle = $(handleId);
   const body = $("body");
+  if (!handle || !body) return;
   let drag = null;
   handle.addEventListener("mousedown", (e) => {
     e.preventDefault();
@@ -1525,7 +1552,7 @@ function saveProject() {
   URL.revokeObjectURL(a.href);
 }
 
-$("btn-save").addEventListener("click", saveProject);
+safeOn($("btn-save"), "click", saveProject);
 $("btn-import-img")?.addEventListener("click", () => {
   state._bitmapReplaceId = null;
   els.fileImg?.click();
@@ -1557,7 +1584,7 @@ attachHelp(
   "Импорт PNG/BMP на холст. В свойствах: Ч/Б или RGB565, масштаб. В коде: PROGMEM + drawBitmap / pushImage."
 );
 
-$("btn-new").addEventListener("click", () => {
+safeOn($("btn-new"), "click", () => {
   if (!confirm("Новый проект?")) return;
   const d = state.project.displayId;
   const o = state.project.orientationId;
@@ -1570,8 +1597,8 @@ $("btn-new").addEventListener("click", () => {
   syncCodeObjUi(false);
   applyDisplayCascade();
   setSelection([]);
-  els.display.value = d;
-  els.orient.value = o;
+  if (els.display) els.display.value = d;
+  if (els.orient) els.orient.value = o;
   redraw();
 });
 
@@ -1580,8 +1607,8 @@ $("btn-ungroup")?.addEventListener("click", ungroupSelection);
 attachHelp($("btn-group"), "Группа", "Объединить выделенные элементы (Ctrl+клик) в одну группу — удобно копировать прибор целиком.");
 attachHelp($("btn-ungroup"), "Разгруппировать", "Убрать выбранные элементы из группы.");
 
-$("btn-open").addEventListener("click", () => els.fileOpen.click());
-els.fileOpen.addEventListener("change", async () => {
+safeOn($("btn-open"), "click", () => els.fileOpen?.click());
+els.fileOpen?.addEventListener("change", async () => {
   const file = els.fileOpen.files?.[0];
   if (!file) return;
   try {
@@ -1625,28 +1652,28 @@ els.fileOpen.addEventListener("change", async () => {
   els.fileOpen.value = "";
 });
 
-// boot
+// boot (меню уже заполнено в bootUi выше — здесь подсказки и отрисовка)
 try {
-  if (!ctx) throw new Error("canvas context unavailable");
-  fillDisplays();
-  fillOrients();
-  els.display.value = state.project.displayId;
-  els.orient.value = state.project.orientationId;
-  fillLibraries();
-  renderToolbox();
+  if (!ctx) {
+    showBootError(
+      new Error(
+        "Нет контекста canvas (#screen). Откройте http://127.0.0.1:8765/ через GUI master.bat и нажмите Ctrl+F5."
+      )
+    );
+  }
 
   attachHelp(
-    els.display.closest(".field") || els.display,
+    els.display?.closest(".field") || els.display,
     "Дисплей",
     "Разрешение и тип экрана (OLED/TFT). Меняет размер холста. Сначала выберите дисплей, потом ориентацию и библиотеку."
   );
   attachHelp(
-    els.orient.closest(".field") || els.orient,
+    els.orient?.closest(".field") || els.orient,
     "Ориентация",
     "Поворот экрана (setRotation 0…3). Меняет ширину↔высоту холста. Рисунок сам не сдвигается — выберите элемент и нажмите «центр» у Центр X / Центр Y."
   );
   attachHelp(
-    els.library.closest(".field") || els.library,
+    els.library?.closest(".field") || els.library,
     "Библиотека",
     "Под какую draw-библиотеку генерировать код (TFT_eSPI, Adafruit GFX, U8g2…). Список зависит от типа дисплея. Вместе с библиотекой подставляется типичное имя объекта (tft. / gfx-> / lcd.)."
   );
@@ -1667,12 +1694,8 @@ try {
   attachHelp($("btn-copy-all"), "Копировать код", "Скопировать код всего экрана в буфер обмена.");
   attachHelp($("btn-grid"), "Сетка", "Включить / выключить пиксельную сетку на холсте.");
 
-  syncCodeObjUi(false);
-  redraw();
+  if (ctx) redraw();
+  else bootUi();
 } catch (err) {
-  console.error(err);
-  document.body.insertAdjacentHTML(
-    "afterbegin",
-    `<pre style="margin:1rem;padding:1rem;background:#400;color:#fff;white-space:pre-wrap">Ошибка запуска:\n${err && err.stack ? err.stack : err}</pre>`
-  );
+  showBootError(err);
 }
