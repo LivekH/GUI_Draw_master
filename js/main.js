@@ -1,8 +1,8 @@
-import { DISPLAYS, ORIENTATIONS, LIBRARIES, filterLibraries, resolveSize, getDisplay, syncCodeObjFromLib } from "./catalog.js?v=20260724f";
-import { TOOLS, createProject, createElement, elementBounds, resetIdCounter, nextId, nextGroupId, resetGroupCounter, getGroup, groupMembers } from "./models.js?v=20260724f";
-import { renderProject } from "./renderer.js?v=20260724f";
-import { codegenObject, codegenScreen } from "./codegen.js?v=20260724f";
-import { format565 } from "./color.js?v=20260724f";
+﻿import { DISPLAYS, ORIENTATIONS, LIBRARIES, filterLibraries, resolveSize, getDisplay, syncCodeObjFromLib } from "./catalog.js?v=20260724g";
+import { TOOLS, createProject, createElement, elementBounds, resetIdCounter, nextId, nextGroupId, resetGroupCounter, getGroup, groupMembers } from "./models.js?v=20260724g";
+import { renderProject } from "./renderer.js?v=20260724g";
+import { codegenObject, codegenScreen } from "./codegen.js?v=20260724g";
+import { format565 } from "./color.js?v=20260724g";
 import {
   readFileAsDataURL,
   loadImage,
@@ -10,7 +10,7 @@ import {
   rasterizeBitmap,
   bitsToImageData,
   rgb565ToImageData,
-} from "./bitmap.js?v=20260724f";
+} from "./bitmap.js?v=20260724g";
 
 const state = {
   project: createProject(),
@@ -547,7 +547,7 @@ const PROP_HELP = {
   "Начало °":
     "Угол начала дуги в редакторе: 0° — вверх, 90° — вправо, 180° — вниз, 270° — влево; рост по часовой. Полное кольцо: задайте разницу 360° (например 0…360) — в коде будет drawArc(…, 0, 360) с толщиной. В коде для каждой библиотеки углы пересчитываются (TFT_eSPI: 0=6ч; Lovyan/Arduino_GFX: 0=3ч CW; U8g2: 0…255).",
   "Конец °":
-    "Угол конца дуги. Для полного кольца: Начало 0, Конец 360 (или −180…180). Толщина задаёт r_outer−r_inner в одном drawArc.",
+    "Угол конца дуги. Если Конец < Начало — короткая дуга против часовой (в коде для Arduino_GFX/Lovyan/TFT концы меняются, чтобы не было длинного обхода). Полное кольцо: 0…360.",
   Делений: "Число крупных (major) рисок, включая крайние. Подписей столько же.",
   "Промежут.": "Сколько мелких делений между соседними крупными.",
   "Значение мин.": "Число на первом конце дуги (если не включена инверсия).",

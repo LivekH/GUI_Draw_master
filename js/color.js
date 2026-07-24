@@ -1,4 +1,4 @@
-/** RGB888 ↔ RGB565 helpers */
+﻿/** RGB888 ↔ RGB565 helpers */
 
 export function hexToRgb(hex) {
   const h = String(hex || "#000000").replace("#", "");

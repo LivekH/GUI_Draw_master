@@ -1,9 +1,9 @@
-/**
+﻿/**
  * Code generators — map canvas objects → library draw calls
  */
-import { format565, formatUtftColor, isOn, hexToRgb } from "./color.js?v=20260724f";
-import { bitsToCArray, rgb565ToCArray, safeArrayName } from "./bitmap.js?v=20260724f";
-import { libCallPrefix } from "./catalog.js?v=20260724f";
+import { format565, formatUtftColor, isOn, hexToRgb } from "./color.js?v=20260724g";
+import { bitsToCArray, rgb565ToCArray, safeArrayName } from "./bitmap.js?v=20260724g";
+import { libCallPrefix } from "./catalog.js?v=20260724g";
 
 export function polar(cx, cy, r, deg) {
   const a = ((deg - 90) * Math.PI) / 180;
@@ -157,6 +157,11 @@ function emitArcApprox(api, cx, cy, r, a0, a1, col, lines, segments = 24, thickn
  *
  * U8g2 — отражение ориентации (90−E), поэтому start/end меняем местами.
  * Полный оборот (|Δ|≥360°) не сдвигаем по нулю — иначе 0° и 360° схлопываются в одну точку.
+ *
+ * TFT_eSPI / Lovyan / Arduino_GFX рисуют дугу всегда по часовой от start к end
+ * (если end < start — длинный обход через 0). В редакторе span = end−start может
+ * быть отрицательным (короткая дуга против часовой) — тогда концы меняем местами,
+ * иначе 90→55 на устройстве станет ~325° вместо ~35°.
  */
 function isFullSweep(a0, a1) {
   return Math.abs(Number(a1) - Number(a0)) >= 359.5;
@@ -164,6 +169,7 @@ function isFullSweep(a0, a1) {
 
 function toLibAngles(api, a0, a1) {
   const mode = api.arcAngle || "raw";
+  const span = Number(a1) - Number(a0);
 
   // Полное кольцо → всегда 0…360 (U8g2: 0…255), один drawArc(r0,r1,…)
   if (isFullSweep(a0, a1)) {
@@ -175,23 +181,28 @@ function toLibAngles(api, a0, a1) {
     return { a0, a1 };
   }
 
+  let s;
+  let e;
+
   // TFT_eSPI: 0=6ч CW  ←  editor 0=12ч CW  ⇒  +180°
   if (mode === "tft_espi") {
-    return { a0: Math.round(normArc(a0 + 180)), a1: Math.round(normArc(a1 + 180)) };
-  }
-
-  // Lovyan / Arduino_GFX / LVGL: 0=3ч CW  ←  editor 0=12ч CW  ⇒  +270° (−90°)
-  if (mode === "lovyan" || mode === "arduino_gfx") {
-    return { a0: Math.round(normArc(a0 + 270)), a1: Math.round(normArc(a1 + 270)) };
-  }
-
-  // U8g2: 0=3ч CCW, 0…255; отражение 90−E + swap концов
-  if (mode === "u8g2") {
+    s = Math.round(normArc(a0 + 180));
+    e = Math.round(normArc(a1 + 180));
+  } else if (mode === "lovyan" || mode === "arduino_gfx") {
+    // Lovyan / Arduino_GFX / LVGL: 0=3ч CW  ←  editor 0=12ч CW  ⇒  +270° (−90°)
+    s = Math.round(normArc(a0 + 270));
+    e = Math.round(normArc(a1 + 270));
+  } else if (mode === "u8g2") {
+    // U8g2: 0=3ч CCW, 0…255; отражение 90−E + swap концов
     const toU8 = (a) => Math.round((normArc(90 - a) * 256) / 360) % 256;
     return { a0: toU8(a1), a1: toU8(a0) };
+  } else {
+    return { a0, a1 };
   }
 
-  return { a0, a1 };
+  // CW-only API: отрицательный span редактора → короткий сектор = swap концов
+  if (span < 0) return { a0: e, a1: s };
+  return { a0: s, a1: e };
 }
 
 /** Нативная дуга библиотеки или fallback линиями */
